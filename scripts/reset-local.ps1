@@ -187,6 +187,10 @@ if (-not $Force) {
   if ($answer -cne $Database) { Write-Host '已取消。'; return }
 }
 if ($resetMode -eq 'Application') {
+  # Capture the restart boundary before stopping the verified process. This keeps
+  # a clear ordering gap despite Windows process creation timestamps having
+  # coarser precision than Get-Date on some hosts.
+  $restartBoundary = Get-Date
   if ($resolvedRuntime -eq 'Docker') {
     Invoke-CheckedCommand docker ($composeArguments + @('stop', 'backend')) | Out-Host
   } elseif ($backendProcess) {
@@ -215,7 +219,6 @@ if ($resetMode -eq 'IntegrationTest') {
     if ($migrationProcess.ExitCode -ne 0) { throw "集成迁移失败 (exit $($migrationProcess.ExitCode))。" }
   } finally { $migrationProcess.Dispose() }
 } else {
-  $restartBoundary = Get-Date
   if ($resolvedRuntime -eq 'Docker') {
     Invoke-CheckedCommand docker ($composeArguments + @('up', '--build', '-d')) | Out-Host
   } else {
