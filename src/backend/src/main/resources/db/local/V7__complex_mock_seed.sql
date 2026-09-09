@@ -232,14 +232,15 @@ INSERT INTO mock_fault_setting(fault_key,enabled,remaining_count) VALUES
 INSERT INTO integration_job(id,job_type,business_key,payload,status,attempt_count,max_attempts,
                             next_attempt_at,locked_at,locked_by,last_error_code,last_error_message)
 SELECT ('80000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
-       CASE WHEN i=3 THEN 'LATE_REMINDER' ELSE 'CARD_REFRESH' END,
-       CASE WHEN i=3 THEN (SELECT appointment_id::text FROM late_notification ORDER BY appointment_id LIMIT 1)
-         ELSE 'mock-group-001|' || (current_date+CASE WHEN i IN (2,5) THEN 1 ELSE 0 END) END,
-       CASE WHEN i=3 THEN jsonb_build_object('appointmentId',(SELECT appointment_id FROM late_notification ORDER BY appointment_id LIMIT 1))
-         ELSE jsonb_build_object('businessDate',current_date+CASE WHEN i IN (2,5) THEN 1 ELSE 0 END,'groupId','mock-group-001') END,
+       CASE WHEN i=2 THEN 'LATE_REMINDER' ELSE 'CARD_REFRESH' END,
+       CASE WHEN i=2 THEN (SELECT appointment_id::text FROM late_notification ORDER BY appointment_id LIMIT 1)
+         ELSE 'mock-group-001|' || (current_date+CASE WHEN i IN (3,5) THEN 1 ELSE 0 END) END,
+       CASE WHEN i=2 THEN jsonb_build_object('appointmentId',(SELECT appointment_id FROM late_notification ORDER BY appointment_id LIMIT 1))
+         ELSE jsonb_build_object('businessDate',current_date+CASE WHEN i IN (3,5) THEN 1 ELSE 0 END,'groupId','mock-group-001') END,
        (ARRAY['PENDING','RUNNING','RETRY_WAIT','SUCCEEDED','DEAD'])[i],
        CASE WHEN i=5 THEN 5 WHEN i=1 THEN 0 ELSE 1 END,5,
-       clock_timestamp()+interval '1 day',CASE WHEN i=2 THEN clock_timestamp() END,CASE WHEN i=2 THEN 'mock-worker' END,
+       CASE WHEN i=3 THEN clock_timestamp()-interval '1 minute' ELSE clock_timestamp()+interval '1 day' END,
+       CASE WHEN i=2 THEN clock_timestamp() END,CASE WHEN i=2 THEN 'mock-worker' END,
        CASE WHEN i IN (3,5) THEN 'NETWORK_TIMEOUT' END,CASE WHEN i IN (3,5) THEN '模拟卡片调用超时' END
 FROM generate_series(1,5) s(i);
 

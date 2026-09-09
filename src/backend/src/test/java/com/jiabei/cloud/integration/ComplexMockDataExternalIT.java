@@ -131,6 +131,14 @@ class ComplexMockDataExternalIT {
     assertThat(count("SELECT count(*) FROM mock_fault_setting")).isEqualTo(6);
   }
 
+  @Test void keepsTodayAndTomorrowCardRefreshesClaimable() {
+    String cardJoin = " FROM integration_job j JOIN daily_card c ON j.job_type='CARD_REFRESH' AND j.business_key=c.group_open_conversation_id || '|' || c.business_date";
+    assertThat(List.of(
+        count("SELECT count(*)" + cardJoin + " WHERE c.business_date BETWEEN (now() AT TIME ZONE 'Asia/Shanghai')::date AND (now() AT TIME ZONE 'Asia/Shanghai')::date+1 AND j.status='RUNNING'"),
+        count("SELECT count(*)" + cardJoin + " WHERE c.business_date=(now() AT TIME ZONE 'Asia/Shanghai')::date+1 AND j.status IN ('PENDING','RETRY_WAIT') AND j.next_attempt_at<=clock_timestamp() AND (j.locked_at IS NULL OR j.locked_at<clock_timestamp()-interval '2 minutes')")))
+        .containsExactly(0, 1);
+  }
+
   private void assertDateDistribution(int offset, int total, int active, int cancelled) {
     String where = " WHERE booking_date=(now() AT TIME ZONE 'Asia/Shanghai')::date + " + offset;
     assertThat(count("SELECT count(*) FROM appointment" + where)).isEqualTo(total);
