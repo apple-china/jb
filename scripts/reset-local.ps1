@@ -24,6 +24,8 @@ function Invoke-CheckedCommand([string]$Executable, [string[]]$Arguments, [strin
   return $output
 }
 
+# Read only configuration names consumed by this application; never print their values.
+Assert-MockResetConfiguration ([Environment]::GetEnvironmentVariables())
 $resolvedRuntime = Resolve-MockRuntime -Requested $Runtime -ProjectRoot $projectRoot
 $databaseHost = '127.0.0.1'
 $port = 55432
@@ -70,13 +72,41 @@ function Invoke-ResetSql([string]$Sql, [switch]$ViaStdin) {
   }
 }
 
-$identitySql = "SELECT current_database() || '|' || current_user || '|' || coalesce(host(inet_server_addr()),'') || '|' || current_setting('server_version_num')"
+function Get-VerifiedPortablePostmaster([string]$ActualDirectory, [string]$StartedEpoch) {
+  $expectedDirectory = Join-Path $projectRoot '.tools\pgdata'
+  Assert-MockDataDirectory -ExpectedDirectory $expectedDirectory -ActualDirectory $ActualDirectory
+  $directoryItem = Get-Item -LiteralPath $expectedDirectory -ErrorAction Stop
+  for ($ancestor = $directoryItem; $null -ne $ancestor; $ancestor = $ancestor.Parent) {
+    if (($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw '安全拒绝：data_directory 路径含重解析链接，无法证明项目归属。'
+    }
+  }
+  $postmasterLines = @(Get-Content -LiteralPath (Join-Path $expectedDirectory 'postmaster.pid') -ErrorAction Stop)
+  if ($postmasterLines.Count -lt 4 -or $postmasterLines[0] -notmatch '\A[1-9][0-9]*\z' -or
+      $postmasterLines[2] -notmatch '\A[0-9]+\z' -or $postmasterLines[3] -cne [string]$port) {
+    throw '安全拒绝：PostgreSQL postmaster PID/端口记录无效。'
+  }
+  Assert-MockDataDirectory -ExpectedDirectory $expectedDirectory -ActualDirectory $postmasterLines[1]
+  $serverEpoch = [double]::Parse($StartedEpoch, [Globalization.CultureInfo]::InvariantCulture)
+  if ([Math]::Abs($serverEpoch - [long]$postmasterLines[2]) -gt 2) { throw '安全拒绝：连接与 postmaster 启动时间不一致。' }
+  $postmasterProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$($postmasterLines[0])" -ErrorAction Stop
+  $expectedExecutable = Join-Path $projectRoot '.tools\postgresql-16.15\pgsql\bin\postgres.exe'
+  if (-not $postmasterProcess -or $postmasterProcess.ExecutablePath -ine $expectedExecutable) { throw '安全拒绝：PostgreSQL 进程不是本项目便携程序。' }
+  $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
+  if ($listeners.Count -eq 0 -or @($listeners | Where-Object { $_.OwningProcess -ne $postmasterProcess.ProcessId }).Count -gt 0) {
+    throw '安全拒绝：PostgreSQL 监听端口不属于已验证 postmaster。'
+  }
+  return "$($postmasterProcess.ProcessId)|$($postmasterProcess.CreationDate.Ticks)|$($postmasterLines[2])"
+}
+
+$identitySql = "SELECT current_database() || '|' || current_user || '|' || coalesce(host(inet_server_addr()),'') || '|' || current_setting('server_version_num') || '|' || current_setting('data_directory') || '|' || extract(epoch from pg_postmaster_start_time())"
 $identity = (Invoke-ResetSql $identitySql | Out-String).Trim().Split('|')
-if ($identity.Count -ne 4 -or $identity[3] -notmatch '\A[0-9]+\z') { throw '安全拒绝：数据库身份查询结果无效。' }
+if ($identity.Count -ne 6 -or $identity[3] -notmatch '\A[0-9]+\z') { throw '安全拒绝：数据库身份查询结果无效。' }
 if ($identity[0] -cne $Database) { throw '安全拒绝：连接到的数据库名与请求不一致。' }
 Assert-SafeMockResetTarget -DatabaseHost $databaseHost -Port $port -Database $identity[0] -Profile $Profile -ServerAddress $identity[2]
 $databaseOwner = $identity[1]
 Assert-SafeMockResetOwner -DatabaseOwner $databaseOwner
+if ($resolvedRuntime -eq 'Portable') { $postmasterIdentity = Get-VerifiedPortablePostmaster $identity[4] $identity[5] }
 
 Write-Host "目标：$resolvedRuntime / ${databaseHost}:$port / $Database / Profile=$Profile / owner=$databaseOwner / PostgreSQL=$($identity[3])"
 Write-Host '迁移：V1 / V3 / V4 / V5 / V6 / V7__complex_mock_seed.sql'
@@ -93,6 +123,19 @@ if ($DryRun) { Write-Host 'DryRun：仅查询目标身份；未停止服务、�
 $java = Join-Path $projectRoot '.tools\jdk\jdk-21.0.12.1+1\bin\java.exe'
 $mavenRoot = Join-Path $projectRoot '.tools\maven\apache-maven-3.9.16'
 $jar = Join-Path $projectRoot 'src\backend\target\jiabei-cloud-backend-1.0.0.jar'
+function Get-VerifiedBackendProcess {
+  $pidFile = Join-Path $projectRoot '.tools\backend.pid'
+  if (-not (Test-Path -LiteralPath $pidFile)) { return $null }
+  $processId = 0
+  if (-not [int]::TryParse((Get-Content -LiteralPath $pidFile -Raw).Trim(), [ref]$processId) -or $processId -le 0) { throw '安全拒绝：backend PID 文件无效。' }
+  $process = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction Stop
+  if (-not $process) { return $null }
+  if ($process.ExecutablePath -ine $java) { throw '安全拒绝：backend 不是本项目 Java 程序。' }
+  foreach ($argument in @($jar, '--spring.profiles.active=local', '--spring.datasource.url=jdbc:postgresql://127.0.0.1:55432/jiabei')) {
+    if ($process.CommandLine -notmatch ('(?:^|[\s"])' + [regex]::Escape($argument) + '(?:[\s"]|$)')) { throw '安全拒绝：backend 命令不是本项目本机后端。' }
+  }
+  return $process
+}
 if ($resetMode -eq 'IntegrationTest') {
   $launcher = @(Get-ChildItem -LiteralPath (Join-Path $mavenRoot 'boot') -Filter 'plexus-classworlds-*.jar')
   if (-not (Test-Path -LiteralPath $java) -or $launcher.Count -ne 1 -or
@@ -111,19 +154,7 @@ if ($resetMode -eq 'IntegrationTest') {
   try {
     if (-not $archive.GetEntry('BOOT-INF/classes/db/local/V7__complex_mock_seed.sql')) { throw '安全取消：后端 jar 尚未包含 V7，请先构建后端。' }
   } finally { $archive.Dispose() }
-  $backendPidFile = Join-Path $projectRoot '.tools\backend.pid'
-  $backendProcess = $null
-  if (Test-Path -LiteralPath $backendPidFile) {
-    $backendProcessId = 0
-    if (-not [int]::TryParse((Get-Content -LiteralPath $backendPidFile -Raw).Trim(), [ref]$backendProcessId) -or $backendProcessId -le 0) { throw '安全拒绝：backend PID 文件无效。' }
-    $backendProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$backendProcessId"
-    if ($backendProcess -and ($backendProcess.ExecutablePath -ine $java -or
-        -not $backendProcess.CommandLine.Contains($jar) -or
-        -not $backendProcess.CommandLine.Contains('--spring.profiles.active=local') -or
-        -not $backendProcess.CommandLine.Contains('--spring.datasource.url=jdbc:postgresql://127.0.0.1:55432/jiabei'))) {
-      throw '安全拒绝：backend PID 对应的进程不是本项目本机后端。'
-    }
-  }
+  $backendProcess = Get-VerifiedBackendProcess
   $listeners = @(Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue)
   foreach ($listener in $listeners) {
     if (-not $backendProcess -or $listener.OwningProcess -ne $backendProcess.ProcessId) { throw '安全拒绝：8080 端口由未验证的进程占用。' }
@@ -163,11 +194,18 @@ if ($resetMode -eq 'Application') {
     $currentProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$($backendProcess.ProcessId)"
     if ($currentProcess -and ($currentProcess.CreationDate -ne $backendProcess.CreationDate -or $currentProcess.CommandLine -cne $backendProcess.CommandLine)) { throw '安全拒绝：backend 进程身份已改变。' }
     if ($currentProcess) { Stop-Process -Id $backendProcess.ProcessId -Force -ErrorAction Stop }
+    Wait-MockBackendStopped -ProcessId $backendProcess.ProcessId
   }
 }
 
 # PostgreSQL needs CASCADE for a populated schema. Recreate atomically as the verified owner.
 $resetSql = 'BEGIN; DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION "' + $databaseOwner + '"; COMMIT;'
+# Re-read server identity and local ownership after confirmation/stop, immediately before DROP.
+$currentIdentity = (Invoke-ResetSql $identitySql | Out-String).Trim().Split('|')
+if (($currentIdentity -join '|') -cne ($identity -join '|')) { throw '安全拒绝：数据库连接身份已改变。' }
+if ($resolvedRuntime -eq 'Portable' -and (Get-VerifiedPortablePostmaster $currentIdentity[4] $currentIdentity[5]) -cne $postmasterIdentity) {
+  throw '安全拒绝：PostgreSQL postmaster 身份已改变。'
+}
 Invoke-ResetSql $resetSql -ViaStdin | Out-Host
 
 if ($resetMode -eq 'IntegrationTest') {
@@ -177,6 +215,7 @@ if ($resetMode -eq 'IntegrationTest') {
     if ($migrationProcess.ExitCode -ne 0) { throw "集成迁移失败 (exit $($migrationProcess.ExitCode))。" }
   } finally { $migrationProcess.Dispose() }
 } else {
+  $restartBoundary = Get-Date
   if ($resolvedRuntime -eq 'Docker') {
     Invoke-CheckedCommand docker ($composeArguments + @('up', '--build', '-d')) | Out-Host
   } else {
@@ -185,6 +224,11 @@ if ($resetMode -eq 'IntegrationTest') {
   $healthy = $false
   for ($attempt = 0; $attempt -lt 90; $attempt++) {
     try {
+      if ($resolvedRuntime -eq 'Portable') {
+        $newBackend = Get-VerifiedBackendProcess
+        $newListeners = @(Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction Stop)
+        Assert-MockBackendStarted -Process $newBackend -NotBefore $restartBoundary -ListenerProcessIds @($newListeners | ForEach-Object { $_.OwningProcess })
+      }
       $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/actuator/health' -TimeoutSec 2
       if ($health.status -eq 'UP') { $healthy = $true; break }
     } catch { }

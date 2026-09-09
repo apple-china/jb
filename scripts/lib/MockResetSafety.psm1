@@ -59,4 +59,74 @@ function Get-MockResetMode {
   throw '安全拒绝：重置组合仅支持 local/jiabei 或 test/jiabei_mock_it。'
 }
 
-Export-ModuleMember -Function Assert-SafeMockResetTarget, Assert-SafeMockResetOwner, Resolve-MockRuntime, Get-MockResetMode
+function Assert-MockDataDirectory {
+  param([string]$ExpectedDirectory, [string]$ActualDirectory)
+  if (-not [System.IO.Path]::IsPathRooted($ActualDirectory)) { throw '安全拒绝：data_directory 不是绝对路径。' }
+  try {
+    $expectedPath = [System.IO.Path]::GetFullPath($ExpectedDirectory).TrimEnd('\', '/')
+    $actualPath = [System.IO.Path]::GetFullPath($ActualDirectory).TrimEnd('\', '/')
+  } catch { throw '安全拒绝：data_directory 路径无效。' }
+  if ($actualPath -ine $expectedPath) { throw '安全拒绝：PostgreSQL data_directory 不属于本项目。' }
+}
+
+function Assert-MockResetConfiguration {
+  param([System.Collections.IDictionary]$Configuration)
+  $profiles = @($Configuration['SPRING_PROFILES_ACTIVE'], $Configuration['SPRING_PROFILES_DEFAULT'])
+  $urls = @($Configuration['DATABASE_URL'], $Configuration['SPRING_DATASOURCE_URL'])
+  if ($Configuration['SPRING_APPLICATION_JSON']) {
+    try { $settings = $Configuration['SPRING_APPLICATION_JSON'] | ConvertFrom-Json }
+    catch { throw '安全拒绝：Spring 应用配置无法解析。' }
+    # Only settings which can affect this application's profile/datasource are relevant.
+    foreach ($property in $settings.PSObject.Properties) {
+      if ($property.Name -in @('spring.profiles.active','spring.profiles.default')) { $profiles += $property.Value }
+      if ($property.Name -eq 'spring.datasource.url') { $urls += $property.Value }
+      if ($property.Name -eq 'spring') {
+        foreach ($springProperty in $property.Value.PSObject.Properties) {
+          if ($springProperty.Name -eq 'profiles') {
+            foreach ($profileProperty in $springProperty.Value.PSObject.Properties) {
+              if ($profileProperty.Name -in @('active','default')) { $profiles += $profileProperty.Value }
+            }
+          }
+          if ($springProperty.Name -eq 'datasource') {
+            foreach ($sourceProperty in $springProperty.Value.PSObject.Properties) {
+              if ($sourceProperty.Name -eq 'url') { $urls += $sourceProperty.Value }
+            }
+          }
+        }
+      }
+    }
+  }
+  foreach ($configuredProfile in $profiles) {
+    if ($configuredProfile -and $configuredProfile -match '(?i)(?:^|[,;\s])prod(?:uction)?(?:$|[,;\s])') {
+      throw '安全拒绝：当前应用含生产配置 Profile。'
+    }
+  }
+  foreach ($configuredUrl in $urls) {
+    if (-not $configuredUrl) { continue }
+    # Do not echo the URL: it may contain credentials.
+    if ($configuredUrl -notmatch '\Ajdbc:postgresql://(127\.0\.0\.1|localhost|db)(?::(5432|55432))?/(jiabei(?:_mock_it)?)(?:\?[^\r\n]*)?\z') {
+      throw '安全拒绝：当前应用数据库配置不是白名单本机 JDBC 目标。'
+    }
+  }
+}
+
+function Wait-MockBackendStopped {
+  param([int]$ProcessId, [ValidateRange(1,120)][int]$Attempts = 60)
+  for ($poll = 0; $poll -lt $Attempts; $poll++) {
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    $listeners = @(Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue)
+    if (-not $process -and $listeners.Count -eq 0) { return }
+    if ($poll -lt $Attempts - 1) { Start-Sleep -Milliseconds 500 }
+  }
+  throw '安全取消：backend PID 尚未退出或 8080 端口尚未释放。'
+}
+
+function Assert-MockBackendStarted {
+  param($Process, [datetime]$NotBefore, [int[]]$ListenerProcessIds)
+  if (-not $Process -or $Process.CreationDate -lt $NotBefore -or @($ListenerProcessIds).Count -eq 0 -or
+      @($ListenerProcessIds | Where-Object { $_ -ne $Process.ProcessId }).Count -gt 0) {
+    throw '后端健康检查尚未对应新启动且持有 8080 端口的本项目进程。'
+  }
+}
+
+Export-ModuleMember -Function Assert-SafeMockResetTarget, Assert-SafeMockResetOwner, Resolve-MockRuntime, Get-MockResetMode, Assert-MockDataDirectory, Assert-MockResetConfiguration, Wait-MockBackendStopped, Assert-MockBackendStarted
