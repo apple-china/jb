@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="团队 Logo 占位">
+  <rect width="256" height="256" rx="60" fill="#eef3ff"/>
+  <circle cx="128" cy="128" r="72" fill="#768bc5"/>
+  <circle cx="128" cy="128" r="32" fill="#eef3ff"/>
+</svg>

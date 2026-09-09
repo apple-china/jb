@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="老师头像占位">
+  <rect width="256" height="256" rx="128" fill="#fff1df"/>
+  <circle cx="128" cy="94" r="48" fill="#f59a23"/>
+  <path d="M42 228c8-53 39-82 86-82s78 29 86 82" fill="#1f2947"/>
+</svg>

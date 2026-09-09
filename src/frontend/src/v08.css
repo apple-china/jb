@@ -1,0 +1,26 @@
+.record-shell > .date-tabs { order: 1; }
+.record-shell > .record-results { order: 2; }
+.record-shell > .record-filter { order: 3; }
+.record-shell > .desktop-table,
+.record-shell > .mobile-admin-list,
+.record-shell > .empty-records,
+.record-shell > .pager { order: 4; }
+.record-filter-head { justify-content: stretch; }
+.record-filter-head .range-presets { width: 100%; }
+.record-filter-head .preset-button { flex: 1; }
+.record-actions { display: grid; grid-template-columns: repeat(4, minmax(78px, 1fr)); }
+.record-actions.limited-actions { grid-template-columns: repeat(2, minmax(78px, 1fr)); }
+.record-action { min-width: 0; height: 42px; padding: 0 12px; }
+.record-action.primary-action { background: #fff; border-color: #e2e8f0; color: #244066; }
+.record-action.primary-action:hover { border-color: #ffb57d; color: #e96a0b; }
+.weekday-grid button:disabled { cursor: not-allowed; opacity: .48; }
+.time-control-grid input:disabled { background: #edf1f5; color: #8b96a6; }
+
+@media (max-width: 720px) {
+  .record-results { display: grid; grid-template-columns: 1fr; width: 100%; gap: 10px; }
+  .record-actions { width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+  .record-actions.limited-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .record-action { width: 100%; padding: 0 5px; gap: 4px; font-size: 12px; }
+  .record-action span { display: inline; white-space: nowrap; }
+  .record-filter { margin-top: 0; }
+}

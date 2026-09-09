@@ -1,0 +1,66 @@
+/* Second acceptance pass: precise alignment and readable time treatment. */
+.quick-booking{position:relative;justify-content:center}
+.quick-booking>span{justify-content:center}
+.quick-booking>svg{position:absolute;right:20px}
+.time-value{letter-spacing:0!important;word-spacing:.08em;text-align:center}
+.appointment-time strong span{margin:0;padding:0;background:none;color:inherit;border-radius:0;font-size:inherit}
+.appointment-card.cancelled .appointment-time>span{background:#fff1e7;color:#b75c14}
+.schedule-list>div{grid-template-columns:76px minmax(0,1fr) auto}
+.schedule-person small{white-space:normal;line-height:1.35}
+.time-wheel-empty{min-height:72px;display:grid;place-items:center;border:1px dashed #d9dee8;border-radius:15px;background:#fafbfc}
+
+/* Anchored custom select: the menu stays visually attached to its trigger. */
+.smart-select{position:relative;min-width:0}
+.smart-select-trigger{width:100%;height:50px;border:1px solid #dfe3eb;border-radius:14px;background:linear-gradient(180deg,#fff,#f8f9fb);box-shadow:0 5px 14px rgba(24,34,59,.05);display:grid;grid-template-columns:auto minmax(0,1fr) 18px;align-items:center;gap:9px;padding:0 13px;color:var(--ink);text-align:left;font:inherit;font-weight:700;transition:.2s}
+.smart-select-trigger:focus-visible,.smart-select.open .smart-select-trigger{outline:0;border-color:#6e89c7;box-shadow:0 0 0 3px rgba(22,58,139,.09)}
+.smart-select-trigger>.placeholder{color:#8b92a0;font-weight:600}
+.smart-select-leading:empty{display:none}
+.smart-select-leading{display:grid;place-items:center;color:var(--blue)}
+.smart-select-trigger>svg{color:#607096;transition:transform .2s}
+.smart-select.open .smart-select-trigger>svg{transform:rotate(180deg)}
+.smart-select-menu{position:absolute;z-index:90;top:calc(100% + 5px);left:0;right:0;max-height:220px;overflow:auto;padding:6px;border:1px solid #e0e4ec;border-radius:14px;background:rgba(255,255,255,.98);box-shadow:0 16px 34px rgba(22,35,66,.16);backdrop-filter:blur(16px)}
+.smart-select-menu button{width:100%;min-height:42px;border:0;border-radius:10px;background:transparent;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--ink);font:inherit;text-align:left}
+.smart-select-menu button:hover,.smart-select-menu button[aria-selected=true]{background:#f0f4fc;color:var(--blue)}
+.smart-select-menu button:disabled{color:#b8bdc7;text-decoration:line-through}
+.select-pop-enter-active,.select-pop-leave-active{transition:.16s ease}
+.select-pop-enter-from,.select-pop-leave-to{opacity:0;transform:translateY(-5px) scale(.98)}
+
+/* Apple-like scroll wheel with unavailable slots retained but disabled. */
+.time-wheel-shell{position:relative;height:176px;margin-top:8px;border:1px solid #e0e4ec;border-radius:18px;background:linear-gradient(180deg,#f8f9fb,#fff 45%,#f8f9fb);overflow:hidden;box-shadow:inset 0 1px #fff,0 8px 20px rgba(24,34,59,.06)}
+.time-wheel-shell:before,.time-wheel-shell:after{content:"";position:absolute;z-index:3;left:0;right:0;height:53px;pointer-events:none}
+.time-wheel-shell:before{top:0;background:linear-gradient(#f8f9fb,rgba(248,249,251,.2))}
+.time-wheel-shell:after{bottom:0;background:linear-gradient(rgba(248,249,251,.2),#f8f9fb)}
+.time-wheel-focus{position:absolute;z-index:1;top:66px;left:12px;right:12px;height:44px;border-radius:12px;background:#eef3fd;border:1px solid #dce5f7;pointer-events:none}
+.time-wheel{position:relative;z-index:2;height:100%;overflow-y:auto;scroll-snap-type:y mandatory;padding:66px 12px;scrollbar-width:none}
+.time-wheel::-webkit-scrollbar{display:none}
+.time-wheel button{width:100%;height:44px;scroll-snap-align:center;border:0;background:transparent;display:flex;align-items:center;justify-content:center;gap:10px;color:#667085;font:inherit;font-size:16px;font-variant-numeric:tabular-nums}
+.time-wheel button.selected{color:var(--blue);font-size:20px;font-weight:850}
+.time-wheel button:disabled{color:#b8bdc7;text-decoration:line-through}
+.time-wheel button small{font-size:11px;color:#b8bdc7}
+
+/* Admin controls and resource editor. */
+.booking-number{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;overflow-wrap:anywhere}
+.time-control-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.time-control{height:50px;border:1px solid #dfe3eb;border-radius:14px;background:linear-gradient(180deg,#fff,#f8f9fb);display:flex!important;align-items:center;gap:8px;padding:0 12px;color:var(--blue);box-shadow:0 5px 14px rgba(24,34,59,.05)}
+.form-stack .time-control input{min-height:0;height:46px;border:0;background:transparent;padding:0;box-shadow:none;color:var(--ink)}
+.toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.toggle-grid>div{min-height:58px;border:1px solid #e2e5eb;border-radius:14px;background:#fafbfc;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.toggle-grid>div>span{font-size:14px;font-weight:750;color:var(--ink)}
+.upload-control{position:relative;min-height:74px;border:1px dashed #bfcbe0;border-radius:16px;background:#f7f9fd;display:grid!important;grid-template-columns:34px 1fr;grid-template-rows:auto auto;align-items:center;column-gap:10px;padding:12px 14px;color:var(--blue);overflow:hidden}
+.upload-control input{position:absolute;inset:0;z-index:2;width:100%;height:100%;opacity:0;cursor:pointer}
+.upload-control>svg{grid-row:1/3}
+.upload-control>b{font-size:14px;color:var(--ink)}
+.upload-control>small{font-size:12px;color:var(--muted)}
+.filter-button{align-content:center;justify-content:center}
+.appointment-actions{display:flex;justify-content:flex-end;gap:16px;border-top:1px solid #edf0f4;margin-top:12px;padding-top:10px}
+.weekday-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.weekday-grid label{display:flex;align-items:center;gap:4px;font-size:13px}
+.password-login{display:grid;gap:9px;border-top:1px solid #eceff4;margin-top:16px;padding-top:16px}.password-login h2{font-size:15px;margin:0}.password-login input{height:44px;border:1px solid #dfe3eb;border-radius:12px;padding:0 12px;font:inherit}
+
+@media(max-width:720px){
+  .admin-sidebar .admin-user>span{display:block;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:750;color:var(--ink);margin-right:9px}
+  .filter-button{display:grid;place-items:center;gap:0}
+  .filter-button svg{display:block;margin:auto}
+  .filter-panel{overflow:visible}
+  .smart-select-menu{max-height:190px}
+}
+@media(max-width:370px){.time-control-grid{grid-template-columns:1fr}.toggle-grid{gap:8px}}

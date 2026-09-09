@@ -1,0 +1,41 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { requestDingTalkAuthCode } from './dingtalk'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  delete window.dd
+})
+
+describe('requestDingTalkAuthCode', () => {
+  it('rejects cleanly outside DingTalk', async () => {
+    await expect(requestDingTalkAuthCode()).rejects.toMatchObject({
+      code: 'NOT_IN_DINGTALK',
+    })
+  })
+
+  it('passes public configuration to JSAPI and returns its one-time code', async () => {
+    vi.stubEnv('VITE_DINGTALK_CLIENT_ID', 'client-public')
+    vi.stubEnv('VITE_DINGTALK_CORP_ID', 'corp-public')
+    const requestAuthCode = vi.fn((options:{success:(result:{code?:string})=>void}) => options.success({ code: 'one-time-code' }))
+    window.dd = { requestAuthCode }
+
+    await expect(requestDingTalkAuthCode()).resolves.toEqual({
+      authCode: 'one-time-code',
+      corpId: 'corp-public',
+    })
+    expect(requestAuthCode).toHaveBeenCalledWith(expect.objectContaining({
+      clientId: 'client-public',
+      corpId: 'corp-public',
+    }))
+  })
+
+  it('does not retry when JSAPI fails', async () => {
+    vi.stubEnv('VITE_DINGTALK_CLIENT_ID', 'client-public')
+    vi.stubEnv('VITE_DINGTALK_CORP_ID', 'corp-public')
+    const requestAuthCode = vi.fn((options:{fail:(error:unknown)=>void}) => options.fail(new Error('denied')))
+    window.dd = { requestAuthCode }
+
+    await expect(requestDingTalkAuthCode()).rejects.toMatchObject({ code: 'DINGTALK_AUTH_FAILED' })
+    expect(requestAuthCode).toHaveBeenCalledTimes(1)
+  })
+})

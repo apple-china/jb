@@ -1,0 +1,32 @@
+{
+  "name": "jiabei-cloud-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc -b && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:iphone15:safari": "playwright test tests/e2e/iphone15.spec.ts --project=iphone15-safari",
+    "test:e2e:iphone15:dingtalk": "playwright test tests/e2e/iphone15.spec.ts --project=iphone15-dingtalk"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "5.2.1",
+    "lucide-vue-next": "0.468.0",
+    "vue": "3.5.13",
+    "vue-router": "4.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "22.10.2",
+    "@vue/test-utils": "2.4.6",
+    "jsdom": "25.0.1",
+    "typescript": "5.7.2",
+    "vite": "5.4.21",
+    "vitest": "2.1.8",
+    "vue-tsc": "2.2.0"
+  },
+  "packageManager": "pnpm@11.19.0"
+}

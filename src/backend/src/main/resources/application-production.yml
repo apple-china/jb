@@ -1,0 +1,19 @@
+spring:
+  flyway:
+    locations: classpath:db/migration
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+jiabei:
+  bootstrap:
+    super-admin:
+      username: ${SUPER_ADMIN_USERNAME:}
+      password: ${SUPER_ADMIN_INITIAL_PASSWORD:}
+      dingtalk-user-id: ${SUPER_ADMIN_DINGTALK_USER_ID:}
+      nickname: ${SUPER_ADMIN_NICKNAME:Admin}
+  security:
+    secure-cookie: true
+  integration:
+    mode: disabled

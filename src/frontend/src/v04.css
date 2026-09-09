@@ -1,0 +1,45 @@
+/* V0.4 browser-comment refinements: compact admin tools and two-column time wheel. */
+.appointment-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:14px}
+.appointment-toolbar .filter-button,.card-action{height:40px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 13px;font-weight:750}
+.card-action{color:var(--blue)}
+.appointment-date-tabs{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;border-radius:12px;background:#e9edf3}
+.appointment-date-tabs button{min-width:62px;height:34px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-weight:750}
+.appointment-date-tabs button.active{background:#fff;color:var(--blue);box-shadow:0 3px 9px rgba(24,34,59,.08)}
+.filter-panel{grid-template-columns:repeat(4,minmax(0,1fr)) auto}
+.calendar-filter{height:50px;border:1px solid #dfe3eb;border-radius:14px;background:linear-gradient(180deg,#fff,#f8f9fb);box-shadow:0 5px 14px rgba(24,34,59,.05);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--blue)}
+.calendar-filter input{width:100%;min-width:0;height:46px;border:0;background:transparent;color:var(--ink);outline:0;font:inherit;font-weight:700}
+.admin-date-field{display:grid;gap:7px}
+.admin-date-field>span{font-size:13px;color:#596174;font-weight:700}
+.admin-date-choice{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px;border-radius:15px;background:#edf0f5}
+.admin-date-choice button{min-height:48px;border:0;border-radius:11px;background:transparent;color:var(--muted)}
+.admin-date-choice b,.admin-date-choice small{display:block}
+.admin-date-choice b{font-size:14px}.admin-date-choice small{font-size:10px;margin-top:2px}
+.admin-date-choice button.active{background:#fff;color:var(--blue);box-shadow:0 4px 12px rgba(24,34,59,.09)}
+
+.time-wheel-pair{display:grid;grid-template-columns:1fr 1fr}
+.time-wheel-pair .time-wheel{min-width:0;padding-left:18px;padding-right:18px}
+.time-wheel-pair .time-wheel:first-of-type button{padding-right:19px}
+.time-wheel-pair .time-wheel:last-of-type button{padding-left:19px}
+.time-wheel-colon{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:850;color:var(--blue);pointer-events:none}
+.time-wheel-pair .time-wheel-focus{left:12px;right:12px}
+
+.weekday-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.weekday-grid button{position:relative;aspect-ratio:1/1.04;min-width:0;border:1px solid #e0e5ee;border-radius:12px;background:linear-gradient(180deg,#fff,#f6f8fb);color:#667085;display:grid;place-content:center;box-shadow:0 3px 9px rgba(24,34,59,.04)}
+.weekday-grid button b{font-size:12px;white-space:nowrap}
+.weekday-grid button svg{position:absolute;top:3px;right:3px;stroke-width:3}
+.weekday-grid button.selected{border-color:#6f8bc8;background:#eaf1ff;color:var(--blue);box-shadow:inset 0 0 0 1px rgba(22,58,139,.11),0 5px 12px rgba(22,58,139,.09)}
+.setting-card li.inactive{margin:0 -6px;padding-left:10px;padding-right:10px;border-radius:11px;background:#f1f3f6;opacity:.58;filter:grayscale(1)}
+.admin-bottom{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:1fr}
+
+@media(max-width:720px){
+  .admin-main{padding-top:18px}
+  .appointment-toolbar{justify-content:space-between}
+  .appointment-toolbar .filter-button{width:42px;padding:0;font-size:0}
+  .appointment-toolbar .filter-button svg{margin:auto}
+  .card-action{margin-left:0}
+  .appointment-date-tabs{margin:0 auto}
+  .filter-panel{grid-template-columns:1fr 1fr}
+  .weekday-grid{gap:5px}
+  .weekday-grid button{border-radius:10px}
+  .admin-sidebar .admin-user>span{max-width:clamp(120px,45vw,210px)}
+}

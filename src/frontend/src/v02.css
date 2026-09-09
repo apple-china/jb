@@ -1,0 +1,40 @@
+/* V0.2 compact mobile booking and polished controls */
+.mobile-app{padding-bottom:98px}
+.mobile-header{height:68px}
+.header-identity{display:flex;align-items:center;gap:9px;color:var(--ink)}
+.header-identity>span{font-size:13px;font-weight:750;white-space:nowrap}
+.header-identity .avatar{width:36px;height:36px;box-shadow:0 6px 14px rgba(22,58,139,.16)}
+.time-value{font-variant-numeric:tabular-nums;white-space:nowrap}
+.time-value i{display:inline-block;margin:0 .11em;font-style:normal}
+.schedule-list>div{grid-template-columns:66px 1fr auto;transition:background .2s}
+.schedule-list>div.mine{background:#fff9f3}
+.schedule-person{display:grid;gap:3px}
+.schedule-person b{font-size:14px;color:var(--ink)}
+.schedule-person small{font-size:12px;color:var(--muted)}
+.schedule-list em.mine{background:#fff0e3;color:var(--orange-dark);font-weight:800}
+.inline-note{display:flex;align-items:center;min-height:38px;padding:9px 11px;line-height:1.4}
+.mobile-utilities{position:fixed;z-index:45;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100% - 32px),488px);display:flex;justify-content:space-between;pointer-events:none}
+.mobile-utilities button{pointer-events:auto;height:42px;border:1px solid rgba(225,228,235,.96);background:rgba(255,255,255,.94);backdrop-filter:blur(14px);box-shadow:0 8px 24px rgba(20,32,59,.12);color:var(--blue);border-radius:999px;display:flex;align-items:center;gap:7px;padding:0 14px;font-size:13px;font-weight:750}
+.mobile-utilities .rules-link{width:auto;margin:0;grid-template-columns:none;text-align:center}
+.mobile-utilities .floating-logout{color:#6d7482}
+.toast{bottom:76px}
+.polished-select{height:52px;display:grid;grid-template-columns:22px 1fr 18px;align-items:center;gap:8px;padding:0 13px;border:1px solid #dfe3eb;border-radius:15px;background:linear-gradient(180deg,#fff,#f8f9fb);box-shadow:0 5px 14px rgba(24,34,59,.05);color:var(--blue);transition:.2s}
+.polished-select:focus-within{border-color:#6e89c7;box-shadow:0 0 0 3px rgba(22,58,139,.09)}
+.form-stack .polished-select select{appearance:none;-webkit-appearance:none;width:100%;height:50px;min-height:0;border:0;background:transparent;padding:0;color:var(--ink);outline:0}
+.polished-select select:invalid{color:var(--muted)}
+
+/* V0.2 admin date picker, audit details and narrow-screen safeguards */
+.date-toolbar button{white-space:nowrap;flex:none}
+.date-picker{position:relative;height:42px;min-width:174px;display:flex;align-items:center;gap:8px;padding:0 13px;border:1px solid #dfe3eb;border-radius:13px;background:linear-gradient(180deg,#fff,#f8f9fb);color:var(--blue);box-shadow:0 4px 12px rgba(24,34,59,.05);overflow:hidden}
+.date-picker span{color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap}
+.date-picker input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.small-action{white-space:nowrap;flex:none;min-width:48px}
+.audit-changes{display:grid;gap:7px;margin-top:9px}
+.audit-changes>div{display:grid;grid-template-columns:78px 1fr;gap:8px;align-items:center;border-radius:9px;background:#f6f7f9;padding:8px 9px}
+.audit-changes>div>span{font-size:12px;color:var(--muted)}
+.audit-changes p{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0;color:var(--ink);font-size:12px;text-align:right}
+.audit-changes del{color:#8a6270;text-decoration-color:#c797a6}
+.audit-changes b{color:#225f43}
+.audit-list details{margin-top:9px}
+.audit-list summary{font-size:13px;font-weight:700}
+@media(max-width:720px){.date-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.date-toolbar button{width:100%;padding:0 8px}.date-picker{grid-column:1/-1;width:100%;min-width:0;justify-content:center}.setting-card header>div{min-width:0}.setting-card header{align-items:flex-start}.small-action{align-self:flex-start}.detail-stack dl div{grid-template-columns:88px minmax(0,1fr)}.audit-changes>div{grid-template-columns:70px minmax(0,1fr)}}

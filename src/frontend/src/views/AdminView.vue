@@ -1,0 +1,545 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { BookOpen, CalendarPlus, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ImagePlus, KeyRound, Plus, RotateCcw, Send, Settings2, UserCog, UsersRound, X } from 'lucide-vue-next'
+import AppDatePicker from '../components/AppDatePicker.vue'
+import BrandMark from '../components/BrandMark.vue'
+import AppSheet from '../components/AppSheet.vue'
+import AppToast from '../components/AppToast.vue'
+import BookingRulesSheet from '../components/BookingRulesSheet.vue'
+import DateTabs from '../components/DateTabs.vue'
+import PolishedSelect from '../components/PolishedSelect.vue'
+import TimeWheel from '../components/TimeWheel.vue'
+import TimeText from '../components/TimeText.vue'
+import { useAppToast } from '../composables/useAppToast'
+import { api, ApiError } from '../api'
+import type { Appointment, CurrentUser, MakeupArtist, Team } from '../types'
+import { avatarInitial } from '../utils/display'
+import { dateRangePreset, type RangePreset } from '../utils/dateRanges'
+import { formatLastSeen } from '../utils/lastSeen'
+
+const router = useRouter()
+const { toast, showToast, showApiError } = useAppToast()
+const user = ref<CurrentUser | null>(null)
+const tab = ref<'appointments' | 'create' | 'settings'>('appointments')
+const loading = ref(true)
+const appointments = ref<Appointment[]>([])
+const makeupArtists = ref<MakeupArtist[]>([])
+const teams = ref<Team[]>([])
+const streamers = ref<any[]>([])
+const accounts = ref<any[]>([])
+const setting = ref<any>(null)
+const today = shanghaiDate()
+const range = ref({ startDate: today, endDate: today })
+const activePreset = ref<RangePreset | ''>('')
+const filterDate = ref(today)
+const filterOpen = ref(false)
+const filterApplied = ref(false)
+const filters = ref({ streamer: '', makeupArtist: '', attendanceStatus: '', status: '' })
+const page = ref(1)
+const pageSize = ref(30)
+const total = ref(0)
+const totalPages = ref(0)
+const detail = ref<any>(null)
+const action = ref<'modify' | 'cancel' | null>(null)
+const rulesOpen = ref(false)
+const logoutOpen = ref(false)
+const cardDateOpen = ref(false)
+const cardDate = ref<'today' | 'tomorrow' | null>('today')
+const cardStatuses = ref<Array<{key:'today'|'tomorrow';bookingDate:string;hasSuccessfulDelivery:boolean;firstDeliveredAt?:string}>>([])
+const cardStatusLoading = ref(false)
+const cardSending = ref(false)
+const dateMode = ref<'today' | 'tomorrow' | null>('today')
+const createSlots = ref<Array<{time:string;available:boolean;reason?:string}>>([])
+const createForm = ref({ streamerUserId: '', makeupArtistId: '', teamId: '', startTime: '', reason: '' })
+const editForm = ref({ makeupArtistId: '', teamId: '', startTime: '', reason: '' })
+const resourceEditor = ref<{ kind: 'makeupArtist' | 'team'; item: any | null } | null>(null)
+const resourceForm = ref<any>({})
+const accountEditor = ref<any | null>(null)
+const accountForm = ref<any>({})
+const accountCreateKind = ref<'MAKEUP' | 'STREAMER' | 'ADMIN'>('STREAMER')
+const dingTalkQuery = ref('')
+const dingTalkEmployees = ref<Array<{dingTalkUserId:string;dingTalkUsername:string;label:string}>>([])
+const dingTalkLoading = ref(false)
+const dingTalkOpen = ref(false)
+const makeupArtistEditorItem = ref<any | null>(null)
+const assignedCredential = ref<{username:string;password:string} | null>(null)
+const revokePasswordOpen = ref(false)
+const expandedSections = ref<Record<string, boolean>>({})
+
+const isAdmin = computed(() => user.value?.role === 'SUPER_ADMIN' || user.value?.role === 'OPERATOR')
+const isSuperAdmin = computed(() => user.value?.role === 'SUPER_ADMIN')
+const historical = computed(() => user.value?.role !== 'MAKEUP')
+const canCreate = computed(() => user.value?.role === 'SUPER_ADMIN' || (['OPERATOR', 'MAKEUP'].includes(user.value?.role ?? '') && !!user.value?.canCreateAppointments))
+const canModify = computed(() => !!user.value?.canModifyAppointments)
+const canCancel = computed(() => !!user.value?.canCancelAppointments)
+const selectedDate = computed(() => dateMode.value ? shanghaiDate(dateMode.value === 'today' ? 0 : 1) : '')
+const streamerOptions = computed(() => streamers.value.map(x => ({ value: x.userId, label: x.nickname })))
+const allMakeupArtistOptions = computed(() => makeupArtists.value.map(x => ({ value: x.id, label: x.name })))
+const makeupArtistOptions = computed(() => makeupArtists.value.filter(x => x.active && x.attending).map(x => ({ value: x.id, label: x.name })))
+const teamOptions = computed(() => teams.value.filter(x => x.active).map(x => ({ value: x.id, label: x.name })))
+const resourceCanSave = computed(() => !!resourceForm.value.name?.trim())
+const streamerAccounts = computed(() => accounts.value.filter(account => account.role === 'STREAMER'))
+const administratorAccounts = computed(() => accounts.value.filter(account => ['SUPER_ADMIN', 'OPERATOR', 'OBSERVER'].includes(account.role)))
+const appointmentDates = computed(() => [{ label: '今天', value: shanghaiDate() }, { label: '明天', value: shanghaiDate(1) }])
+const selectedCardStatus = computed(() => cardStatuses.value.find(item => item.key === cardDate.value))
+const cardWasDelivered = computed(() => !!selectedCardStatus.value?.hasSuccessfulDelivery)
+const cardSubmitDisabled = computed(() => !cardDate.value || cardStatusLoading.value || cardSending.value)
+const timeOptions = computed(() => {
+  const artistId = user.value?.role === 'MAKEUP' ? user.value.makeupArtistId : createForm.value.makeupArtistId
+  const artist = makeupArtists.value.find(item => item.id === artistId)
+  const start = artist?.scheduleEnabled === false ? 0 : 8 * 60
+  const count = artist?.scheduleEnabled === false ? 144 : 73
+  return Array.from({ length: count }, (_, i) => { const n = start + i * 10; const value = String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); return { value, label: value } })
+})
+const statusOptions = [{ value: 'ACTIVE', label: '有效' }, { value: 'CANCELLED', label: '已取消' }]
+const attendanceOptions = [{ value: 'PENDING', label: '待到司' }, { value: 'ARRIVED', label: '已到司' }, { value: 'NOT_ARRIVED', label: '未到' }, { value: 'LATE', label: '迟到' }]
+const editableRoleOptions = computed(() => [
+  { value: 'STREAMER', label: '主播' },
+  { value: 'MAKEUP', label: '化妆师' },
+  ...(user.value?.role === 'SUPER_ADMIN' ? [{ value: 'OPERATOR', label: '运营' }] : []),
+  { value: 'OBSERVER', label: '观察员' },
+])
+const createRoleOptions = computed(() => accountCreateKind.value === 'ADMIN'
+  ? [...(isSuperAdmin.value ? [{ value: 'OPERATOR', label: '运营' }] : []), { value: 'OBSERVER', label: '观察员' }]
+  : editableRoleOptions.value.filter(option => option.value === accountCreateKind.value))
+const accountCanSave = computed(() => !!accountForm.value.nickname?.trim() && (accountEditor.value?.id || (!!accountForm.value.dingTalkUserId && !!accountForm.value.dingTalkUsername)))
+const accountFields = ['nickname', 'role', 'active', 'attending', 'canModifyAppointments', 'canCancelAppointments', 'canCreateAppointments'] as const
+const accountDirty = computed(() => !!accountEditor.value?.id && accountFields.some(key => key === 'nickname' ? accountForm.value.nickname?.trim() !== accountEditor.value.nickname?.trim() : accountForm.value[key] !== accountEditor.value[key]))
+const resourceDirty = computed(() => {
+  const item = makeupArtistEditorItem.value
+  if (!item) return false
+  return resourceForm.value.imageUrl !== (item.avatarUrl ?? '') || JSON.stringify(resourceForm.value.workDays ?? []) !== JSON.stringify(item.workDays ?? []) || resourceForm.value.workStart !== minute(item.workStart) || resourceForm.value.workEnd !== minute(item.workEnd) || resourceForm.value.scheduleEnabled !== (item.scheduleEnabled ?? true) || resourceForm.value.attending !== item.attending
+})
+const resourceEditorDirty = computed(() => {
+  const item = resourceEditor.value?.item
+  if (!item) return true
+  return resourceForm.value.name.trim() !== item.name || resourceForm.value.imageUrl !== (item.avatarUrl ?? item.logoUrl ?? '') || resourceForm.value.active !== item.active || (resourceEditor.value?.kind === 'makeupArtist' && (JSON.stringify(resourceForm.value.workDays ?? []) !== JSON.stringify(item.workDays ?? []) || resourceForm.value.workStart !== minute(item.workStart) || resourceForm.value.workEnd !== minute(item.workEnd) || resourceForm.value.scheduleEnabled !== (item.scheduleEnabled ?? true) || resourceForm.value.attending !== item.attending))
+})
+const accountSubmitLabel = computed(() => !accountEditor.value?.id ? '添加' : accountDirty.value || resourceDirty.value ? '保存' : '确定')
+const resourceSubmitLabel = computed(() => !resourceEditor.value?.item ? '添加' : resourceEditorDirty.value ? '保存' : '确定')
+const accountEditorTitle = computed(() => {
+  if (!accountEditor.value?.id) return '添加 ' + roleLabel(accountForm.value.role ?? '')
+  if (accountEditor.value.dingTalkUserId) return (accountEditor.value.dingTalkUsername || accountEditor.value.nickname) + ' @' + accountEditor.value.dingTalkUserId
+  return accountEditor.value.nickname
+})
+const resourceEditorTitle = computed(() => resourceEditor.value?.item?.name ?? ('添加 ' + (resourceEditor.value?.kind === 'makeupArtist' ? '化妆师' : '团队')))
+const createReasonOptions = ['无法自行预约', '迟到现场补录', '临时加急安排', '特殊资源协调', '其他特殊情况'].map(value => ({ value, label: value }))
+const weekdays = [{ v: 1, l: '一' }, { v: 2, l: '二' }, { v: 3, l: '三' }, { v: 4, l: '四' }, { v: 5, l: '五' }, { v: 6, l: '六' }, { v: 7, l: '日' }]
+
+function shanghaiDate(offset = 0) { const d = new Date(Date.now() + offset * 86_400_000); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d) }
+function minute(value?: string) { return value?.slice(0, 5) ?? '—' }
+function shortDate(value?: string) { return value?.slice(5) ?? '' }
+function statusLabel(value: string) { return value === 'ACTIVE' ? '有效' : '已取消' }
+function attendanceLabel(value: string) { return ({ PENDING: '待到司', ARRIVED: '已到司', NOT_ARRIVED: '未到', LATE: '迟到' } as Record<string, string>)[value] ?? value }
+function sourceLabel(value?: string) { return value === 'STREAMER' ? '本人预约' : '代预约' }
+function dateTime(value?: string) { return value ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—' }
+function roleLabel(value: string) { return ({ SUPER_ADMIN: '超管', OPERATOR: '运营', OBSERVER: '观察员', MAKEUP: '化妆师', STREAMER: '主播' } as Record<string, string>)[value] ?? value }
+function roleAvatarClass(role?: string) { return role === 'STREAMER' ? 'avatar-streamer' : role === 'MAKEUP' ? 'avatar-makeup' : 'avatar-system' }
+function makeupArtistAccount(makeupArtistId: string) { return accounts.value.find(account => account.makeupArtistId === makeupArtistId) }
+function canTestSwitch(account: any) { return !!account && (!!user.value?.testMode || ['127.0.0.1', 'localhost'].includes(window.location.hostname)) && !!(account.dingTalkUserId || account.username) }
+async function switchTestAccount(account: any) {
+  if (!canTestSwitch(account)) return
+  try {
+    const next = await api.mockLogin(account.dingTalkUserId || account.username)
+    window.location.assign(next.role === 'STREAMER' ? '/booking' : '/admin')
+  } catch (error) { showApiError(error, '测试账号切换失败。') }
+}
+function visibleRows<T>(rows: T[], section: string) { return expandedSections.value[section] ? rows : rows.slice(0, 5) }
+function toggleSection(section: string) { expandedSections.value[section] = !expandedSections.value[section] }
+function enabledCount(rows: Array<{ active?: boolean }>) { return rows.filter(row => row.active).length }
+
+async function init() {
+  try {
+    user.value = await api.me()
+    if (user.value.role === 'STREAMER') { await router.replace('/booking'); return }
+    if (user.value.role === 'MAKEUP' && user.value.makeupArtistId) filters.value.makeupArtist = user.value.makeupArtistId
+    await Promise.all([loadAppointments(), loadResources()])
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) await router.replace('/login')
+    else showApiError(error, '加载失败。')
+  } finally { loading.value = false }
+}
+
+function appointmentParams(exporting = false) {
+  const q = new URLSearchParams()
+  if (historical.value && filterApplied.value) { q.set('startDate', range.value.startDate); q.set('endDate', range.value.endDate) }
+  else q.set('date', filterDate.value)
+  if (filters.value.streamer) q.set('streamer', filters.value.streamer)
+  if (filters.value.makeupArtist) q.set('makeupArtist', filters.value.makeupArtist)
+  if (filters.value.attendanceStatus) q.set('attendanceStatus', filters.value.attendanceStatus)
+  if (filters.value.status) q.set('status', filters.value.status)
+  if (!exporting) { q.set('page', String(page.value)); q.set('size', String(pageSize.value)) }
+  return q
+}
+
+async function loadAppointments() {
+  if (historical.value && range.value.startDate > range.value.endDate) { showToast('开始日期不能晚于截止日期。', 'warning'); return }
+  try {
+    const data = await api.adminAppointments(appointmentParams())
+    appointments.value = data.items
+    total.value = data.total ?? data.items.length
+    page.value = data.page ?? 1
+    pageSize.value = data.size ?? pageSize.value
+    totalPages.value = data.totalPages ?? Math.max(1, Math.ceil(total.value / pageSize.value))
+  } catch (error) { showApiError(error, '预约加载失败。') }
+}
+
+function applyPreset(preset: RangePreset) { activePreset.value = preset; range.value = dateRangePreset(preset) }
+async function applyFilters() { filterApplied.value = true; filterOpen.value = false; page.value = 1; await loadAppointments() }
+async function clearFilters() {
+  filters.value = { streamer: '', makeupArtist: user.value?.role === 'MAKEUP' ? user.value.makeupArtistId ?? '' : '', attendanceStatus: '', status: '' }
+  range.value = { startDate: filterDate.value, endDate: filterDate.value }; activePreset.value = ''; filterApplied.value = false; filterOpen.value = true; page.value = 1; pageSize.value = 30; await loadAppointments()
+}
+async function changePage(next: number) { page.value = next; await loadAppointments() }
+async function changePageSize() { page.value = 1; await loadAppointments() }
+async function selectAppointmentDate(date: string) { filterDate.value = date; range.value = { startDate: date, endDate: date }; activePreset.value = ''; filterApplied.value = false; filterOpen.value = false; page.value = 1; await loadAppointments() }
+function selectCreateDate(mode: 'today' | 'tomorrow') { dateMode.value = mode }
+function openCreateTab() { dateMode.value = filterApplied.value ? null : filterDate.value === shanghaiDate(1) ? 'tomorrow' : 'today'; createForm.value.startTime = ''; tab.value = 'create'; void loadCreateAvailability() }
+async function loadCreateAvailability() {
+  const artistId = user.value?.role === 'MAKEUP' ? user.value.makeupArtistId : createForm.value.makeupArtistId
+  if (!selectedDate.value || !artistId) { createSlots.value = []; createForm.value.startTime = ''; return }
+  try { const result = await api.availability(selectedDate.value, artistId); createSlots.value = result.slots; if (!result.slots.some(slot => slot.available && slot.time === createForm.value.startTime)) createForm.value.startTime = '' }
+  catch (error) { createSlots.value = []; createForm.value.startTime = ''; showApiError(error, '可预约时间加载失败。') }
+}
+
+async function exportAppointments() {
+  try {
+    const result = await api.exportAppointments(appointmentParams(true))
+    const url = URL.createObjectURL(result.blob)
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click()
+    URL.revokeObjectURL(url)
+    showToast('预约记录已导出。', 'success')
+  } catch (error) { showApiError(error, '导出失败。') }
+}
+async function openCardDialog() {
+  cardDate.value = filterApplied.value ? null : filterDate.value === shanghaiDate(1) ? 'tomorrow' : 'today'
+  cardDateOpen.value = true; cardStatusLoading.value = true
+  try { cardStatuses.value = (await api.scheduleCardStatus()).dates } catch (error) { showApiError(error, '卡片状态加载失败。') } finally { cardStatusLoading.value = false }
+}
+async function sendCard() {
+  if (!cardDate.value) return
+  try {
+    cardSending.value = true
+    await api.sendScheduleCard(shanghaiDate(cardDate.value === 'today' ? 0 : 1))
+    cardDateOpen.value = false; showToast('安排卡片已进入发送队列。', 'success')
+  } catch (error) { showApiError(error, '卡片触发失败。') } finally { cardSending.value = false }
+}
+async function openDetail(item: Appointment) { try { detail.value = await api.adminAppointmentDetail(item.id) } catch (error) { showApiError(error, '详情加载失败。') } }
+function openAction(kind: 'modify' | 'cancel', item: any) { detail.value = item; action.value = kind; editForm.value = { makeupArtistId: item.makeupArtistId, teamId: item.teamId, startTime: item.startTime, reason: '' } }
+async function runAction() {
+  if (!detail.value || !action.value) return
+  try {
+    if (action.value === 'modify') await api.adminUpdate(detail.value.id, { ...editForm.value, version: detail.value.version })
+    else await api.adminCommand(`${detail.value.id}/cancel`, { version: detail.value.version, reason: editForm.value.reason })
+    showToast(action.value === 'modify' ? '预约已修改。' : '预约已取消。', 'success'); action.value = null; detail.value = null; await loadAppointments()
+  } catch (error) { showApiError(error, '操作失败。') }
+}
+async function adminCreate() {
+  if (!selectedDate.value) return
+  try {
+    await api.adminCreate({ ...createForm.value, makeupArtistId: user.value?.role === 'MAKEUP' ? user.value.makeupArtistId : createForm.value.makeupArtistId, bookingDate: selectedDate.value })
+    createForm.value = { streamerUserId: '', makeupArtistId: '', teamId: '', startTime: '', reason: '' }
+    showToast('代预约成功。', 'success'); tab.value = 'appointments'; await loadAppointments()
+  } catch (error) { showApiError(error, '代预约失败。') }
+}
+async function loadResources() {
+  try {
+    const basic = await Promise.all([api.makeupArtists(), api.teams(), api.streamers()])
+    makeupArtists.value = basic[0]; teams.value = basic[1]; streamers.value = basic[2]
+    if (user.value?.role !== 'MAKEUP') { const extra = await Promise.all([api.accounts(), api.systemSetting()]); accounts.value = extra[0]; setting.value = extra[1] }
+  } catch (error) { showApiError(error, '基础数据加载失败。') }
+}
+async function toggleSystem() { if (!isAdmin.value || !setting.value) return; try { setting.value = await api.updateSystemSetting({ enabled: !setting.value.enabled, version: setting.value.version }); showToast('系统状态已更新。', 'success') } catch (error) { showApiError(error, '系统设置失败。') } }
+function openResource(kind: 'makeupArtist' | 'team', item: any = null) {
+  resourceEditor.value = { kind, item }
+  resourceForm.value = resourceValues(kind, item)
+}
+function resourceValues(kind: 'makeupArtist' | 'team', item: any = null) {
+  return kind === 'makeupArtist'
+    ? { name: item?.name ?? '', imageUrl: item?.avatarUrl ?? '', workDays: item?.workDays ?? [1, 2, 3, 4, 5, 6, 7], workStart: minute(item?.workStart) === '—' ? '08:00' : minute(item.workStart), workEnd: minute(item?.workEnd) === '—' ? '20:00' : minute(item.workEnd), scheduleEnabled: item?.scheduleEnabled ?? true, active: item?.active ?? true, attending: item?.attending ?? true, version: item?.version ?? 0 }
+    : { name: item?.name ?? '', imageUrl: item?.logoUrl ?? '', active: item?.active ?? true, version: item?.version ?? 0 }
+}
+function toggleWorkday(day: number) { if (resourceForm.value.scheduleEnabled === false) return; const days: number[] = resourceForm.value.workDays ?? []; resourceForm.value.workDays = days.includes(day) ? days.filter(value => value !== day) : [...days, day].sort((a, b) => a - b) }
+function validateSchedule() {
+  if (resourceForm.value.scheduleEnabled === false) return true
+  if (!resourceForm.value.workDays?.length) { showToast('请至少选择一个工作日。', 'warning'); return false }
+  if (!resourceForm.value.workStart || !resourceForm.value.workEnd || resourceForm.value.workStart >= resourceForm.value.workEnd) { showToast('上班时间必须早于下班时间。', 'warning'); return false }
+  return true
+}
+async function uploadResource(event: Event) { const file = (event.target as HTMLInputElement).files?.[0]; if (!file) return; try { resourceForm.value.imageUrl = (await api.uploadImage(file)).url; showToast('图片已上传。', 'success') } catch (error) { showApiError(error, '图片上传失败。') } }
+async function saveResource() {
+  if (!resourceEditor.value || !resourceCanSave.value) return
+  const { kind, item } = resourceEditor.value
+  if (item && !resourceEditorDirty.value) { resourceEditor.value = null; return }
+  if (kind === 'makeupArtist' && !validateSchedule()) return
+  try {
+    if (kind === 'makeupArtist') {
+      const body = { name: resourceForm.value.name.trim(), avatarUrl: resourceForm.value.imageUrl, workDays: resourceForm.value.workDays, workStart: resourceForm.value.workStart, workEnd: resourceForm.value.workEnd, scheduleEnabled: resourceForm.value.scheduleEnabled, active: resourceForm.value.active, attending: resourceForm.value.attending, version: resourceForm.value.version }
+      if (item) await api.updateMakeupArtist(item.id, body); else await api.createMakeupArtist(body)
+    } else {
+      const body = { name: resourceForm.value.name.trim(), logoUrl: resourceForm.value.imageUrl, active: resourceForm.value.active, version: resourceForm.value.version }
+      if (item) await api.updateTeam(item.id, body); else await api.createTeam(body)
+    }
+    resourceEditor.value = null; showToast((kind === 'makeupArtist' ? '化妆师' : '团队') + (item ? '已保存。' : '已添加。'), 'success'); await loadResources()
+  } catch (error) { showApiError(error, '资源保存失败。') }
+}
+async function openAccount(item: any = null, role = 'STREAMER') {
+  accountEditor.value = item ?? {}
+  makeupArtistEditorItem.value = null
+  assignedCredential.value = null
+  revokePasswordOpen.value = false
+  dingTalkOpen.value = false
+  if (item) {
+    accountForm.value = { ...item, canCreateAppointments: item.canCreateAppointments ?? ['MAKEUP', 'OPERATOR'].includes(item.role) }
+    resourceForm.value = resourceValues('makeupArtist')
+    dingTalkQuery.value = item.dingTalkUsername ? `${item.dingTalkUsername} @${item.dingTalkUserId}` : ''
+    return
+  }
+  accountCreateKind.value = role === 'OBSERVER' || role === 'OPERATOR' ? 'ADMIN' : role as 'MAKEUP' | 'STREAMER'
+  const initialRole = accountCreateKind.value === 'ADMIN' ? 'OBSERVER' : accountCreateKind.value
+  accountForm.value = { dingTalkUserId: '', dingTalkUsername: '', nickname: '', role: initialRole, active: true, attending: true, canModifyAppointments: false, canCancelAppointments: false, canCreateAppointments: ['MAKEUP', 'OPERATOR'].includes(initialRole) }
+  resourceForm.value = resourceValues('makeupArtist')
+  dingTalkQuery.value = ''
+}
+async function openMakeupArtistEditor(item: any) {
+  const account = makeupArtistAccount(item.id)
+  if (!account) { openResource('makeupArtist', item); return }
+  await openAccount(account)
+  makeupArtistEditorItem.value = item
+  resourceForm.value = resourceValues('makeupArtist', item)
+}
+function closeAccountEditor() {
+  accountEditor.value = null
+  makeupArtistEditorItem.value = null
+  assignedCredential.value = null
+  dingTalkOpen.value = false
+}
+async function loadDingTalkEmployees() {
+  dingTalkLoading.value = true
+  try { dingTalkEmployees.value = await api.dingTalkEmployees(dingTalkQuery.value.trim()) }
+  catch (error) { dingTalkEmployees.value = []; showApiError(error, '钉钉员工加载失败。') }
+  finally { dingTalkLoading.value = false }
+}
+async function searchDingTalk() {
+  dingTalkOpen.value = true
+  accountForm.value.dingTalkUserId = ''
+  accountForm.value.dingTalkUsername = ''
+  await loadDingTalkEmployees()
+}
+async function openDingTalkOptions() { dingTalkOpen.value = true; await loadDingTalkEmployees() }
+function selectDingTalk(employee: {dingTalkUserId:string;dingTalkUsername:string;label:string}) {
+  accountForm.value.dingTalkUserId = employee.dingTalkUserId
+  accountForm.value.dingTalkUsername = employee.dingTalkUsername
+  accountForm.value.nickname = employee.dingTalkUsername
+  dingTalkQuery.value = employee.label
+  dingTalkOpen.value = false
+}
+function onAccountRoleChange(role: string) {
+  const previous = accountForm.value.role
+  accountForm.value.role = role
+  if (['MAKEUP', 'OPERATOR'].includes(role) && previous !== role) accountForm.value.canCreateAppointments = true
+  if (role === 'OPERATOR' && previous !== role) { accountForm.value.canModifyAppointments = false; accountForm.value.canCancelAppointments = false }
+  if (['MAKEUP', 'STREAMER'].includes(role) && !['MAKEUP', 'STREAMER'].includes(previous)) accountForm.value.attending = true
+}
+function toggleAccountAttendance() {
+  if (accountForm.value.role === 'MAKEUP') resourceForm.value.attending = !resourceForm.value.attending
+  else accountForm.value.attending = !accountForm.value.attending
+}
+async function saveAccount() {
+  const nickname = accountForm.value.nickname?.trim() ?? ''
+  const duplicate = accounts.value.find(item => item.id !== accountEditor.value?.id && item.nickname?.trim().toLocaleLowerCase() === nickname.toLocaleLowerCase())
+  if (duplicate) { showToast('昵称已存在，请使用其他昵称。', 'warning'); return }
+  if (accountForm.value.role === 'MAKEUP' && !validateSchedule()) return
+  try {
+    if (!accountEditor.value?.id) {
+      const created = await api.createAccount({ dingTalkUserId: accountForm.value.dingTalkUserId, dingTalkUsername: accountForm.value.dingTalkUsername, nickname, role: accountForm.value.role, active: accountForm.value.active, attending: accountForm.value.role === 'MAKEUP' ? resourceForm.value.attending : accountForm.value.attending, canModifyAppointments: accountForm.value.canModifyAppointments, canCancelAppointments: accountForm.value.canCancelAppointments, canCreateAppointments: accountForm.value.canCreateAppointments })
+      if (accountForm.value.role === 'MAKEUP' && created.makeupArtistId) await api.updateMakeupArtist(created.makeupArtistId, { name: nickname, avatarUrl: resourceForm.value.imageUrl, workDays: resourceForm.value.workDays, workStart: resourceForm.value.workStart, workEnd: resourceForm.value.workEnd, scheduleEnabled: resourceForm.value.scheduleEnabled, active: accountForm.value.active, attending: resourceForm.value.attending, version: 0 })
+      closeAccountEditor(); showToast('账号已添加。', 'success'); await loadResources(); return
+    }
+    if (!accountDirty.value && !resourceDirty.value) { closeAccountEditor(); return }
+    const accountBody = { nickname: accountForm.value.nickname.trim(), role: accountForm.value.role, active: accountForm.value.active, attending: accountForm.value.attending, canModifyAppointments: accountForm.value.canModifyAppointments, canCancelAppointments: accountForm.value.canCancelAppointments, canCreateAppointments: accountForm.value.canCreateAppointments, version: accountForm.value.version }
+    const accountChanged = accountDirty.value
+    const originalResource = makeupArtistEditorItem.value
+    const resourceBody = originalResource ? { name: accountBody.nickname, avatarUrl: resourceForm.value.imageUrl, workDays: resourceForm.value.workDays, workStart: resourceForm.value.workStart, workEnd: resourceForm.value.workEnd, scheduleEnabled: resourceForm.value.scheduleEnabled, active: accountBody.active, attending: resourceForm.value.attending, version: resourceForm.value.version } : null
+    if (resourceDirty.value && resourceBody) await api.updateMakeupArtist(originalResource.id, resourceBody)
+    const updated = accountChanged ? await api.updateAccount(accountEditor.value.id, accountBody) : accountEditor.value
+    if (!originalResource && accountForm.value.role === 'MAKEUP' && updated.makeupArtistId) await api.updateMakeupArtist(updated.makeupArtistId, { name: accountBody.nickname, avatarUrl: resourceForm.value.imageUrl, workDays: resourceForm.value.workDays, workStart: resourceForm.value.workStart, workEnd: resourceForm.value.workEnd, scheduleEnabled: resourceForm.value.scheduleEnabled, active: accountBody.active, attending: resourceForm.value.attending, version: 0 })
+    closeAccountEditor(); showToast('账号已保存。', 'success'); await loadResources()
+  } catch (error) { showApiError(error, '账号保存失败。') }
+}
+async function refreshEditedAccount() {
+  await loadResources()
+  const refreshed = accounts.value.find(item => item.id === accountEditor.value?.id)
+  if (refreshed) { accountEditor.value = refreshed; accountForm.value = { ...refreshed } }
+}
+async function assignPassword() {
+  if (!accountEditor.value?.id) return
+  try { assignedCredential.value = await api.assignAccountPassword(accountEditor.value.id); await refreshEditedAccount(); showToast('账号密码已分配。', 'success') }
+  catch (error) { showApiError(error, '密码分配失败。') }
+}
+async function copyCredential() {
+  if (!assignedCredential.value) return
+  try { await navigator.clipboard.writeText(`账号：${assignedCredential.value.username}\n密码：${assignedCredential.value.password}`); showToast('账号密码已复制。', 'success') }
+  catch { showToast('复制失败，请手动复制。', 'error') }
+}
+async function revokePassword() {
+  if (!accountEditor.value?.id) return
+  try { await api.revokeAccountPassword(accountEditor.value.id); revokePasswordOpen.value = false; assignedCredential.value = null; await refreshEditedAccount(); showToast('账号密码已回收。', 'success') }
+  catch (error) { showApiError(error, '密码回收失败。') }
+}
+async function logout() { try { await api.logout() } finally { sessionStorage.clear(); await router.replace('/login') } }
+watch([dateMode, () => createForm.value.makeupArtistId], loadCreateAvailability)
+onMounted(init)
+</script>
+
+<template>
+  <main class="admin-app">
+    <aside class="admin-sidebar">
+      <BrandMark compact />
+      <nav>
+        <button :class="{ active: tab === 'appointments' }" @click="tab = 'appointments'"><CalendarRange />预约</button>
+        <button v-if="canCreate" :class="{ active: tab === 'create' }" @click="openCreateTab"><CalendarPlus />代预约</button>
+        <button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="tab = 'settings'"><Settings2 />设置</button>
+      </nav>
+      <div class="admin-user">
+        <span>{{ roleLabel(user?.role ?? '') }} · {{ user?.nickname }}</span>
+        <button class="admin-avatar avatar-menu-button" :class="roleAvatarClass(user?.role)" aria-label="打开账号菜单" @click="logoutOpen = true">{{ avatarInitial(user?.nickname) }}</button>
+      </div>
+    </aside>
+    <section class="admin-main">
+      <div v-if="loading" class="loading-state"><span /><span /><span /></div>
+      <template v-else>
+        <section v-if="tab === 'appointments'" class="record-shell">
+          <DateTabs :model-value="filterApplied ? '' : filterDate" :options="appointmentDates" @update:model-value="selectAppointmentDate" />
+          <div class="record-results">
+            <div class="record-total">共 <b>{{ total }}</b> 条记录</div>
+            <div class="record-actions" :class="{ 'limited-actions': !isAdmin }">
+              <button v-if="historical" class="record-action" :class="{ active: filterApplied || filterOpen }" aria-label="筛选预约记录" title="筛选" @click="filterOpen = !filterOpen"><SlidersHorizontal :size="17" /><span>筛选</span></button>
+              <button class="record-action" aria-label="查看预约规则" title="规则" @click="rulesOpen = true"><BookOpen :size="17" /><span>规则</span></button>
+              <button v-if="isAdmin" class="record-action" aria-label="导出预约数据" title="导出数据" @click="exportAppointments"><Download :size="17" /><span>导出</span></button>
+              <button v-if="isAdmin" class="record-action primary-action" aria-label="发送钉钉群卡片" title="发卡" @click="openCardDialog"><Send :size="16" /><span>发卡</span></button>
+            </div>
+          </div>
+          <div v-if="historical && filterOpen" class="record-filter">
+            <div class="range-presets">
+              <button class="preset-button" :class="{ active: activePreset === 'yesterday' }" @click="applyPreset('yesterday')">昨天</button>
+              <button class="preset-button" :class="{ active: activePreset === '7d' }" @click="applyPreset('7d')">近7天</button>
+              <button class="preset-button" :class="{ active: activePreset === '30d' }" @click="applyPreset('30d')">近30天</button>
+            </div>
+            <div class="record-filter-grid">
+              <label><span>开始</span><AppDatePicker v-model="range.startDate" label="开始日期" @update:model-value="activePreset = ''" /></label>
+              <label><span>截止</span><AppDatePicker v-model="range.endDate" label="截止日期" @update:model-value="activePreset = ''" /></label>
+              <label><span>主播</span><PolishedSelect v-model="filters.streamer" :options="streamerOptions" placeholder="全部主播" aria-label="主播筛选" /></label>
+              <label><span>化妆师</span><PolishedSelect v-model="filters.makeupArtist" :options="allMakeupArtistOptions" placeholder="全部化妆师" aria-label="化妆师筛选" /></label>
+              <label><span>签到状态</span><PolishedSelect v-model="filters.attendanceStatus" :options="attendanceOptions" placeholder="全部签到状态" aria-label="签到状态筛选" /></label>
+              <label><span>预约状态</span><PolishedSelect v-model="filters.status" :options="statusOptions" placeholder="全部预约状态" aria-label="预约状态筛选" /></label>
+            </div>
+            <div class="record-filter-foot"><button class="button secondary" @click="clearFilters">重置</button><button class="button primary" @click="applyFilters">查询</button></div>
+          </div>
+          <div v-if="appointments.length" class="desktop-table">
+            <table><thead><tr><th>日期</th><th>时间</th><th>主播</th><th>团队</th><th>化妆师</th><th>签到</th><th>状态</th><th /></tr></thead>
+              <tbody><tr v-for="item in appointments" :key="item.id"><td>{{ item.bookingDate }}</td><td><strong><TimeText :value="item.startTime" /></strong><small v-if="item.conflictOverride" class="overlap-badge">时间重叠</small></td><td>{{ item.streamerName }}</td><td>{{ item.teamName }}</td><td>{{ item.makeupArtistName }}</td><td><span class="attendance-badge" :class="item.attendanceStatus.toLowerCase()">{{ attendanceLabel(item.attendanceStatus) }}</span></td><td><span class="status" :class="item.status.toLowerCase()">{{ statusLabel(item.status) }}</span></td><td><button class="icon-button" aria-label="查看预约详情" @click="openDetail(item)"><ChevronRight :size="18" /></button></td></tr></tbody>
+            </table>
+          </div>
+          <div v-if="appointments.length" class="mobile-admin-list">
+            <button v-for="item in appointments" :key="item.id" @click="openDetail(item)">
+              <span><TimeText :value="item.startTime" /><small class="mobile-record-date">{{ shortDate(item.bookingDate) }}</small></span>
+              <span><b>{{ item.streamerName }}</b><small>{{ item.makeupArtistName }} · {{ item.teamName }}</small><small v-if="item.conflictOverride" class="overlap-badge">时间重叠</small></span>
+              <span class="mobile-status-stack"><em class="attendance-badge" :class="item.attendanceStatus.toLowerCase()">{{ attendanceLabel(item.attendanceStatus) }}</em><em class="status" :class="item.status.toLowerCase()">{{ statusLabel(item.status) }}</em></span>
+            </button>
+          </div>
+          <div v-else class="empty-records">当前条件下暂无预约记录</div>
+          <div v-if="total > 30" class="pager" aria-label="分页">
+            <button class="page-button" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button><span>第 {{ page }} / {{ totalPages }} 页</span><button class="page-button" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
+            <select v-model.number="pageSize" class="page-size" aria-label="每页条数" @change="changePageSize"><option :value="30">30条/页</option><option :value="50">50条/页</option><option :value="100">100条/页</option></select>
+          </div>
+        </section>
+        <section v-else-if="tab === 'create'" class="admin-form-card">
+          <h2>{{ user?.role === 'MAKEUP' ? '化妆师代预约' : '管理员代预约' }}</h2>
+          <div class="form-grid">
+            <div class="admin-date-field"><span>预约日期</span><div class="admin-date-choice"><button v-for="option in [{ value: 'today', label: '今天' }, { value: 'tomorrow', label: '明天' }]" :key="option.value" type="button" :class="{ active: dateMode === option.value }" @click="selectCreateDate(option.value as 'today' | 'tomorrow')"><b>{{ option.label }}</b><small>{{ option.value === 'today' ? shanghaiDate() : shanghaiDate(1) }}</small></button></div><small v-if="!dateMode" class="field-hint">请先选择预约日期</small></div>
+            <label><span>主播</span><PolishedSelect v-model="createForm.streamerUserId" :options="streamerOptions" placeholder="请选择主播" aria-label="主播" /></label>
+            <label v-if="user?.role !== 'MAKEUP'"><span>化妆师</span><PolishedSelect v-model="createForm.makeupArtistId" :options="makeupArtistOptions" placeholder="请选择化妆师" aria-label="化妆师" /></label>
+            <label class="wide"><span>开始时间</span><TimeWheel v-if="createSlots.length" v-model="createForm.startTime" :slots="createSlots" /><div v-else class="time-wheel-empty">请先选择日期和化妆师</div></label>
+            <label><span>团队</span><PolishedSelect v-model="createForm.teamId" :options="teamOptions" placeholder="请选择团队" aria-label="团队" /></label>
+            <label class="wide reason-field"><span>代预约原因（可选）</span><PolishedSelect v-model="createForm.reason" :options="createReasonOptions" placeholder="请选择原因" aria-label="代预约原因" /></label>
+          </div>
+          <button class="button primary admin-create-submit" :disabled="!selectedDate || !createForm.streamerUserId || (!createForm.makeupArtistId && user?.role !== 'MAKEUP') || !createForm.startTime || !createForm.teamId" @click="adminCreate">确认代预约</button>
+        </section>
+        <section v-else class="settings-grid">
+          <article v-if="setting" class="setting-card"><header><div><h2>系统入口</h2><p>关闭后仅管理可进入，系统继续运行。</p></div><button class="switch" :class="{ on: setting.enabled }" :disabled="!isAdmin" @click="toggleSystem"><i /></button></header></article>
+          <article class="setting-card"><header><div class="setting-title"><h2>化妆师</h2><small>启用{{ enabledCount(makeupArtists) }}/{{ makeupArtists.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加化妆师" title="添加化妆师" @click="openAccount(null, 'MAKEUP')"><Plus :size="18" /></button></header><ul><li v-for="makeupArtist in visibleRows(makeupArtists, 'makeup')" :key="makeupArtist.id" :class="{ inactive: !makeupArtist.active, 'test-switchable': canTestSwitch(makeupArtistAccount(makeupArtist.id)) }" :tabindex="canTestSwitch(makeupArtistAccount(makeupArtist.id)) ? 0 : undefined" @click="switchTestAccount(makeupArtistAccount(makeupArtist.id))" @keydown.enter="switchTestAccount(makeupArtistAccount(makeupArtist.id))"><span class="mini-avatar avatar-makeup">{{ avatarInitial(makeupArtist.name) }}</span><span><b>{{ makeupArtist.name }}</b><small v-if="!makeupArtist.active">已停用</small><small v-else>{{ minute(makeupArtist.workStart) }}–{{ minute(makeupArtist.workEnd) }}{{ makeupArtist.attending ? '' : ' · 休息中···' }}</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`编辑${makeupArtist.name}`" :title="`编辑${makeupArtist.name}`" @click.stop="openMakeupArtistEditor(makeupArtist)"><UserCog :size="17" /></button></li></ul><button v-if="makeupArtists.length > 5" class="section-expander" @click="toggleSection('makeup')"><ChevronUp v-if="expandedSections.makeup" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.makeup ? '收起' : `展开 ${makeupArtists.length - 5} 项` }}</button></article>
+          <article class="setting-card"><header><div class="setting-title"><h2>主播</h2><small>启用{{ enabledCount(streamerAccounts) }}/{{ streamerAccounts.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加主播" title="添加主播" @click="openAccount(null, 'STREAMER')"><Plus :size="18" /></button></header><ul><li v-for="account in visibleRows(streamerAccounts, 'streamer')" :key="account.id" :class="{ inactive: !account.active, 'test-switchable': canTestSwitch(account) }" :tabindex="canTestSwitch(account) ? 0 : undefined" @click="switchTestAccount(account)" @keydown.enter="switchTestAccount(account)"><span class="mini-avatar avatar-streamer">{{ avatarInitial(account.nickname) }}</span><span><b>{{ account.nickname }}</b><small v-if="!account.active">已停用</small><small v-else-if="!account.attending">休息中···</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`管理${account.nickname}`" :title="`管理${account.nickname}`" @click.stop="openAccount(account)"><UserCog :size="17" /></button></li></ul><button v-if="streamerAccounts.length > 5" class="section-expander" @click="toggleSection('streamer')"><ChevronUp v-if="expandedSections.streamer" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.streamer ? '收起' : `展开 ${streamerAccounts.length - 5} 项` }}</button></article>
+          <article class="setting-card"><header><div class="setting-title"><h2>团队</h2><small>启用{{ enabledCount(teams) }}/{{ teams.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加团队" title="添加团队" @click="openResource('team')"><Plus :size="18" /></button></header><ul><li v-for="team in visibleRows(teams, 'team')" :key="team.id" :class="{ inactive: !team.active }"><span class="mini-avatar team-avatar">{{ avatarInitial(team.name) }}</span><span><b>{{ team.name }}</b><small v-if="!team.active">已停用</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`编辑${team.name}`" :title="`编辑${team.name}`" @click="openResource('team', team)"><UsersRound :size="17" /></button></li></ul><button v-if="teams.length > 5" class="section-expander" @click="toggleSection('team')"><ChevronUp v-if="expandedSections.team" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.team ? '收起' : `展开 ${teams.length - 5} 项` }}</button></article>
+          <article class="setting-card"><header><div class="setting-title"><h2>系统人员</h2><small>启用{{ enabledCount(administratorAccounts) }}/{{ administratorAccounts.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加系统人员" title="添加系统人员" @click="openAccount(null, 'OBSERVER')"><Plus :size="18" /></button></header><ul><li v-for="account in visibleRows(administratorAccounts, 'administrator')" :key="account.id" :class="{ inactive: !account.active, 'test-switchable': canTestSwitch(account) }" :tabindex="canTestSwitch(account) ? 0 : undefined" @click="switchTestAccount(account)" @keydown.enter="switchTestAccount(account)"><span class="mini-avatar avatar-system">{{ avatarInitial(account.nickname) }}</span><span><b>{{ roleLabel(account.role) }} · {{ account.nickname }}</b><small v-if="!account.active">已停用</small></span><button v-if="isAdmin && account.role !== 'SUPER_ADMIN' && (isSuperAdmin || account.role !== 'OPERATOR')" class="icon-action" :aria-label="`管理${account.nickname}`" :title="`管理${account.nickname}`" @click.stop="openAccount(account)"><UserCog :size="17" /></button></li></ul><button v-if="administratorAccounts.length > 5" class="section-expander" @click="toggleSection('administrator')"><ChevronUp v-if="expandedSections.administrator" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.administrator ? '收起' : `展开 ${administratorAccounts.length - 5} 项` }}</button></article>
+        </section>
+      </template>
+    </section>
+
+    <AppSheet :open="!!detail && !action" title="预约详情" @close="detail = null"><div v-if="detail" class="detail-stack detail-sections">
+      <div class="detail-hero"><TimeText :value="detail.startTime" /><div class="detail-statuses"><span class="status" :class="detail.status.toLowerCase()">{{ statusLabel(detail.status) }}</span><span class="attendance-badge" :class="detail.attendanceStatus.toLowerCase()">{{ attendanceLabel(detail.attendanceStatus) }}</span></div></div>
+      <section><h3>预约标识</h3><dl><div><dt>预约号</dt><dd class="booking-number">{{ detail.bookingNumber }}</dd></div><div><dt>数据 ID</dt><dd class="booking-number">{{ detail.id }}</dd></div></dl></section>
+      <section><h3>基础信息</h3><dl><div><dt>预约日期</dt><dd>{{ detail.bookingDate }}</dd></div><div><dt>主播</dt><dd>{{ detail.streamerName }}</dd></div><div><dt>化妆师</dt><dd>{{ detail.makeupArtistName }}</dd></div><div><dt>团队</dt><dd>{{ detail.teamName }}</dd></div></dl></section>
+      <section><h3>操作信息</h3><dl><div><dt>创建时间</dt><dd>{{ dateTime(detail.createdAt) }}</dd></div><div><dt>创建来源</dt><dd>{{ sourceLabel(detail.source) }}</dd></div><div v-if="detail.source && detail.source !== 'STREAMER'"><dt>代预约</dt><dd>{{ detail.createdByName || '—' }}</dd></div></dl></section>
+      <section><h3>修改记录</h3><div v-if="detail.modifications?.length" class="modification-list"><article v-for="(record,index) in detail.modifications" :key="index"><header><b>{{ record.actorName || '未知人员' }}</b><time>{{ dateTime(record.createdAt) }}</time></header><p v-if="record.reason">{{ record.reason }}</p><ul><li v-for="change in record.changes" :key="change.field"><span>{{ change.field }}</span><del>{{ change.before || '—' }}</del><i>→</i><ins>{{ change.after || '—' }}</ins></li></ul></article></div><p v-else class="empty-copy">暂无修改记录</p></section>
+      <section><h3>其他数据</h3><dl><div v-if="detail.attendanceEvidenceAt"><dt>签到时间</dt><dd>{{ dateTime(detail.attendanceEvidenceAt) }}</dd></div><div v-if="detail.cancelledAt"><dt>取消时间</dt><dd>{{ dateTime(detail.cancelledAt) }}</dd></div><div v-if="detail.cancelledByName"><dt>取消人</dt><dd>{{ detail.cancelledByName }}</dd></div><div v-if="detail.cancelReason"><dt>取消原因</dt><dd>{{ detail.cancelReason }}</dd></div><div v-if="detail.conflictOverride"><dt>时间重叠</dt><dd>是</dd></div></dl></section>
+      <div v-if="detail.status === 'ACTIVE' && (canModify || canCancel)" class="action-row"><button v-if="canModify" class="appointment-action modify" @click="openAction('modify', detail)">修改</button><button v-if="canCancel" class="appointment-action cancel" @click="openAction('cancel', detail)"><X :size="17" />取消</button></div>
+    </div></AppSheet>
+    <AppSheet :open="!!action" :title="action === 'modify' ? '修改预约' : '取消预约'" @close="action = null"><div class="form-stack"><template v-if="action === 'modify'"><label><span>化妆师</span><PolishedSelect v-model="editForm.makeupArtistId" :options="makeupArtistOptions" aria-label="化妆师" /></label><label><span>开始时间</span><PolishedSelect v-model="editForm.startTime" :options="timeOptions" aria-label="开始时间" /></label><label><span>团队</span><PolishedSelect v-model="editForm.teamId" :options="teamOptions" aria-label="团队" /></label></template><label><span>原因（可选）</span><textarea v-model="editForm.reason" /></label></div><template #footer><button class="button primary full" @click="runAction">确认提交</button></template></AppSheet>
+    <AppSheet :open="!!resourceEditor" :title="resourceEditorTitle" @close="resourceEditor = null">
+      <div class="form-stack"><label><span>名称</span><input v-model="resourceForm.name" /></label>
+        <template v-if="resourceEditor?.kind === 'makeupArtist'">
+          <div class="toggle-grid"><div><span>资源启用</span><button class="switch" :class="{ on: resourceForm.active }" @click="resourceForm.active = !resourceForm.active"><i /></button></div><div><span>排班启用</span><button class="switch" :class="{ on: resourceForm.scheduleEnabled }" @click="resourceForm.scheduleEnabled = !resourceForm.scheduleEnabled"><i /></button></div><div><span>在岗出勤</span><button class="switch" :class="{ on: resourceForm.attending }" @click="resourceForm.attending = !resourceForm.attending"><i /></button></div></div>
+          <div><span class="field-label">工作日</span><div class="weekday-grid"><button v-for="day in weekdays" :key="day.v" type="button" :disabled="!resourceForm.scheduleEnabled" :class="{ selected: resourceForm.workDays?.includes(day.v) }" @click="toggleWorkday(day.v)"><Check v-if="resourceForm.workDays?.includes(day.v)" :size="12" /><b>周{{ day.l }}</b></button></div></div>
+          <div class="time-control-grid"><label><span>上班</span><input v-model="resourceForm.workStart" :disabled="!resourceForm.scheduleEnabled" type="time" step="600" /></label><label><span>下班</span><input v-model="resourceForm.workEnd" :disabled="!resourceForm.scheduleEnabled" type="time" step="600" /></label></div>
+        </template>
+        <div v-else class="toggle-grid"><div><span>启用选项</span><button class="switch" :class="{ on: resourceForm.active }" @click="resourceForm.active = !resourceForm.active"><i /></button></div></div>
+        <label class="upload-control"><input type="file" accept="image/png,image/jpeg" @change="uploadResource" /><ImagePlus /><b>从相册选择图片</b><small>PNG/JPG，≤2MB</small></label>
+      </div>
+      <template #footer><button class="button primary full" :disabled="!resourceCanSave" @click="saveResource">{{ resourceSubmitLabel }}</button></template>
+    </AppSheet>
+    <AppSheet :open="!!accountEditor" :title="accountEditorTitle" :subtitle="accountEditor?.id ? formatLastSeen(accountEditor.lastLoginAt) : ''" @close="closeAccountEditor">
+      <div class="form-stack account-editor-form">
+        <template v-if="accountEditor?.id">
+          <label><span>昵称</span><input v-model="accountForm.nickname" maxlength="100" placeholder="系统内显示的昵称" /></label>
+          <label><span>角色</span><PolishedSelect :model-value="accountForm.role" :options="editableRoleOptions" aria-label="角色" @update:model-value="onAccountRoleChange" /></label>
+        </template>
+        <template v-else>
+          <label v-if="accountCreateKind === 'ADMIN'"><span>角色</span><PolishedSelect :model-value="accountForm.role" :options="createRoleOptions" aria-label="角色" @update:model-value="onAccountRoleChange" /></label>
+          <label><span>钉钉</span><input v-model="dingTalkQuery" autocomplete="off" placeholder="搜索姓名或钉钉 ID" aria-label="搜索钉钉员工" @focus="openDingTalkOptions" @input="searchDingTalk" /></label>
+          <div v-if="dingTalkOpen" class="dingtalk-options" role="listbox" aria-label="钉钉员工选项">
+            <p v-if="dingTalkLoading">正在查询钉钉员工…</p>
+            <button v-for="employee in dingTalkEmployees" v-else :key="employee.dingTalkUserId" type="button" role="option" :aria-selected="accountForm.dingTalkUserId === employee.dingTalkUserId" :class="{ selected: accountForm.dingTalkUserId === employee.dingTalkUserId }" @click="selectDingTalk(employee)"><span>{{ employee.dingTalkUsername }}</span><small>@{{ employee.dingTalkUserId }}</small><Check v-if="accountForm.dingTalkUserId === employee.dingTalkUserId" :size="17" /></button>
+            <p v-if="!dingTalkLoading && !dingTalkEmployees.length">没有可注册的同事</p>
+          </div>
+          <label><span>昵称</span><input v-model="accountForm.nickname" maxlength="100" placeholder="系统内显示的昵称" /></label>
+        </template>
+        <div class="toggle-grid">
+          <div><span>账号启用</span><button class="switch" :class="{ on: accountForm.active }" @click="accountForm.active = !accountForm.active"><i /></button></div>
+          <div v-if="['MAKEUP', 'STREAMER'].includes(accountForm.role)"><span>在岗出勤</span><button class="switch" :class="{ on: accountForm.role === 'MAKEUP' ? resourceForm.attending : accountForm.attending }" @click="toggleAccountAttendance"><i /></button></div>
+          <div v-if="['MAKEUP', 'OPERATOR'].includes(accountForm.role)"><span>代预约</span><button class="switch" :class="{ on: accountForm.canCreateAppointments }" @click="accountForm.canCreateAppointments = !accountForm.canCreateAppointments"><i /></button></div>
+        </div>
+        <div v-if="accountForm.role === 'OPERATOR'" class="toggle-grid"><div><span>允许修改</span><button class="switch" :class="{ on: accountForm.canModifyAppointments }" @click="accountForm.canModifyAppointments = !accountForm.canModifyAppointments"><i /></button></div><div><span>允许取消</span><button class="switch" :class="{ on: accountForm.canCancelAppointments }" @click="accountForm.canCancelAppointments = !accountForm.canCancelAppointments"><i /></button></div></div>
+        <template v-if="accountForm.role === 'MAKEUP'">
+          <div class="toggle-grid"><div><span>排班启用</span><button class="switch" :class="{ on: resourceForm.scheduleEnabled }" @click="resourceForm.scheduleEnabled = !resourceForm.scheduleEnabled"><i /></button></div></div>
+          <div><span class="field-label">工作日</span><div class="weekday-grid"><button v-for="day in weekdays" :key="day.v" type="button" :disabled="!resourceForm.scheduleEnabled" :class="{ selected: resourceForm.workDays?.includes(day.v) }" @click="toggleWorkday(day.v)"><Check v-if="resourceForm.workDays?.includes(day.v)" :size="12" /><b>周{{ day.l }}</b></button></div></div>
+          <div class="time-control-grid"><label><span>上班</span><input v-model="resourceForm.workStart" :disabled="!resourceForm.scheduleEnabled" type="time" step="600" /></label><label><span>下班</span><input v-model="resourceForm.workEnd" :disabled="!resourceForm.scheduleEnabled" type="time" step="600" /></label></div>
+          <label class="upload-control"><input type="file" accept="image/png,image/jpeg" @change="uploadResource" /><ImagePlus /><b>从相册选择图片</b><small>PNG/JPG，≤2MB</small></label>
+        </template>
+        <template v-if="accountEditor?.id">
+          <div class="credential-actions"><button v-if="!accountForm.username" class="button secondary" @click="assignPassword"><KeyRound :size="17" />分配密码</button><button v-else class="button danger" @click="revokePasswordOpen = true">回收密码</button></div>
+          <div v-if="assignedCredential" class="credential-card"><dl><div><dt>账号</dt><dd>{{ assignedCredential.username }}</dd></div><div><dt>密码</dt><dd>{{ assignedCredential.password }}</dd></div></dl><button class="button secondary full" @click="copyCredential"><Copy :size="17" />复制账号</button></div>
+        </template>
+      </div>
+      <template #footer><button class="button primary full" :disabled="!accountCanSave" @click="saveAccount">{{ accountSubmitLabel }}</button></template>
+    </AppSheet>
+    <AppSheet :open="revokePasswordOpen" title="确认回收密码" @close="revokePasswordOpen = false"><div class="confirm-copy"><div class="warning-icon">!</div><p>回收后仅钉钉登录，账号密码登录需重新分配</p></div><template #footer><div class="two-buttons"><button class="button secondary" @click="revokePasswordOpen = false">暂不回收</button><button class="button danger-solid" @click="revokePassword">确认回收</button></div></template></AppSheet>
+    <AppSheet :open="cardDateOpen" title="钉钉群卡片" @close="cardDateOpen = false"><div class="card-date-options"><button :class="{ active: cardDate === 'today' }" @click="cardDate = 'today'"><b>今天</b><br />{{ shanghaiDate() }}</button><button :class="{ active: cardDate === 'tomorrow' }" @click="cardDate = 'tomorrow'"><b>明天</b><br />{{ shanghaiDate(1) }}</button></div><template #footer><button class="button full card-submit" :class="{ resend: cardWasDelivered }" :disabled="cardSubmitDisabled" @click="sendCard"><RotateCcw v-if="cardWasDelivered" :size="17" />{{ cardWasDelivered ? '重新发送' : '确认发送' }}</button></template></AppSheet>
+    <AppSheet :open="logoutOpen" title="退出登录" @close="logoutOpen = false"><p>确定要退出当前账号吗？</p><template #footer><div class="action-row"><button class="button secondary" @click="logoutOpen = false">取消</button><button class="button danger" @click="logout">退出登录</button></div></template></AppSheet>
+    <BookingRulesSheet :open="rulesOpen" :role="user?.role ?? 'OBSERVER'" @close="rulesOpen = false" />
+    <nav v-if="user?.role !== 'MAKEUP' || canCreate" class="admin-bottom" aria-label="管理端导航"><button :class="{ active: tab === 'appointments' }" @click="tab = 'appointments'"><CalendarRange />预约</button><button v-if="canCreate" :class="{ active: tab === 'create' }" @click="openCreateTab"><CalendarPlus />代预约</button><button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="tab = 'settings'"><Settings2 />设置</button></nav>
+    <AppToast :message="toast.message" :kind="toast.kind" />
+  </main>
+</template>
+

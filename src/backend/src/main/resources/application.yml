@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: jiabei-cloud
+  profiles:
+    default: local
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/jiabei}
+    username: ${DATABASE_USER:jiabei}
+    password: ${DATABASE_PASSWORD:jiabei_local}
+    hikari:
+      connection-init-sql: SET TIME ZONE 'Asia/Shanghai'
+  flyway:
+    enabled: true
+  jackson:
+    time-zone: Asia/Shanghai
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
+springdoc:
+  api-docs:
+    version: OPENAPI_3_1
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+jiabei:
+  upload-directory: ${UPLOAD_DIRECTORY:uploads}
+  booking:
+    zone-id: Asia/Shanghai
+    time-step-minutes: 10
+    service-duration-minutes: 20
+    streamer-lead-minutes: 20
+    admin-lead-minutes: 1
+    attendance-window-minutes: 120
+    late-grace-minutes: 10
+    group-id: mock-group-001
+    card-template-id: mock-schedule-template
+    late-card-template-id: mock-late-template
+    app-entry-url: http://127.0.0.1:5173/booking
+    outbox-max-attempts: 5
+  security:
+    allowed-origins: ${ALLOWED_ORIGINS:http://127.0.0.1:5173,http://localhost:5173}
+    session-hours: 8
+    login-rate-limit-per-minute: 20
+  moredian:
+    org-id: ${MOREDIAN_ORG_ID:mock-org}
+    org-auth-key: ${MOREDIAN_ORG_AUTH_KEY:}
+    device-sn: ${MOREDIAN_DEVICE_SN:mock-device}
+    require-signature: ${MOREDIAN_REQUIRE_SIGNATURE:false}

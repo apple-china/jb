@@ -1,0 +1,68 @@
+.section-expander {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-top: 1px solid #edf1f6;
+  background: transparent;
+  color: #52709a;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.setting-title { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.setting-title > small { color: #7b8799; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.record-action.active { border-color: #ffb57d; background: #fff2e8; color: #e96a0b; }
+
+.account-editor-form { gap: 16px; }
+.dingtalk-options {
+  max-height: 230px;
+  overflow-y: auto;
+  border: 1px solid #dfe6f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+.dingtalk-options > p { margin: 12px; color: #718096; text-align: center; }
+.dingtalk-options > button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  min-height: 46px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 1fr auto 20px;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  color: #17355f;
+  cursor: pointer;
+}
+.dingtalk-options > button:hover { background: #f4f7fc; }
+.dingtalk-options > button.selected { background: #edf4ff; color: #175fbb; }
+.dingtalk-options > button span { font-weight: 750; }
+.dingtalk-options > button small { color: #718096; }
+.credential-actions { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.credential-actions .button, .credential-card .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.credential-card { border: 1px solid #cfe0f7; background: #f5f9ff; border-radius: 16px; padding: 14px; }
+.credential-card > p { margin: 0 0 10px; color: #68788e; font-size: 13px; }
+.credential-card dl { margin: 0 0 12px; display: grid; gap: 7px; }
+.credential-card dl div { display: grid; grid-template-columns: 48px 1fr; }
+.credential-card dt { color: #718096; }
+.credential-card dd { margin: 0; font-weight: 800; letter-spacing: .04em; }
+.combined-resource-section { display: grid; gap: 16px; padding-top: 4px; }
+.combined-resource-section > h3 { margin: 0; padding-top: 16px; border-top: 1px solid #edf1f6; font-size: 16px; color: #17355f; }
+.appointment-details > div:first-child { padding-bottom: 0; border-bottom: 0; }
+.appointment-time .attendance-badge { margin-left: auto; background: #eef1f5; color: #596174; }
+.appointment-time .attendance-badge.arrived { background: #e7f7ed; color: #187742; }
+.appointment-time .attendance-badge.not_arrived { background: #fff3d8; color: #9a6200; }
+.appointment-time .attendance-badge.late { background: #ffe9e8; color: #b8322d; }
+.appointment-time .attendance-badge.pending { background: #edf2fb; color: #46618f; }
+
+@media (max-width: 520px) {
+  .setting-title { align-items: flex-start; flex-direction: column; gap: 3px; }
+}
