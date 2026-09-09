@@ -16,21 +16,30 @@
 - 健康检查：http://127.0.0.1:8080/actuator/health
 - Swagger：http://127.0.0.1:8080/swagger-ui/index.html
 
-停止服务：`.\scripts\stop-local.ps1`。重置测试数据：`.\scripts\reset-local.ps1`（会清空本项目测试数据库和上传文件）。
+停止服务：`.\scripts\stop-local.ps1`。重置 Local/Test 数据前必须先执行安全预览；脚本只重建已验证本机数据库的 `public` schema，不会触碰上传文件、数据库本身或卷存储：
+
+```powershell
+.\scripts\reset-local.ps1 -Runtime Auto -Profile local -Database jiabei -DryRun
+.\scripts\reset-local.ps1 -Runtime Auto -Profile local -Database jiabei
+```
+
+Docker、便携数据库、隔离测试库的访问命令、安全边界和只读验证查询见 [数据库访问、验证与 Mock 重置](docs/database-access.md)。
 
 ## 本地测试账号
 
 登录页可直接选择五种 Mock 身份，也可使用账号密码：
 
-| 角色 | Mock 身份 / 账号 | 初始密码 |
-|---|---|---|
-| 唯一超管 | `admin01` / `superadmin` | `Admin123!` |
-| 运营 | `operator01` | `Operator123!` |
-| 观察员 | `observer01` | `Observer123!` |
-| 化妆师 | `makeup01` | `Makeup123!` |
-| 主播 | `streamer01`～`streamer04` | `Streamer123!` |
+| 角色 | 兼容 Mock 身份 / 登录 ID |
+|---|---|
+| 唯一超管 | `admin01` / `superadmin` |
+| 运营 | `operator01` |
+| 观察员 | `observer01` |
+| 化妆师 | `makeup01` |
+| 主播 | `streamer01`～`streamer04` |
 
-超管初始密码登录后强制改密；快捷 Mock 登录仅用于本地验收。`streamer04` 未绑定钉钉，用于验证“可预约，但无法自动签到和接收 @ 提醒”。
+快捷 Mock 登录仅用于本地验收；本文不记录密码或会话凭据。`streamer04` 未绑定钉钉，用于验证“可预约，但无法自动签到和接收 @ 提醒”。
+
+当前唯一 Local/Test 数据源是 `V7__complex_mock_seed.sql`：包含 1 个超管、5 个运营、5 个观察员、10 个化妆师账号及资源、30 个主播和 10 个团队；今天、明天各 100 条预约，过去三天共 100 条。另有 50 名未注册候选同事仅存在于 Local/Test 钉钉目录接口，不写入账号表。
 
 ## 当前业务范围
 
@@ -57,14 +66,14 @@
 .\scripts\smoke-api.ps1
 ```
 
-使用现有 PostgreSQL 执行外部集成测试：
+使用独立 PostgreSQL 测试库执行外部集成测试（尖括号内容为本机占位符，禁止复用开发库）：
 
 ```powershell
-$env:JIABEI_IT_JDBC_URL='jdbc:postgresql://127.0.0.1:55432/jiabei'
-$env:JIABEI_IT_DATABASE_USER='jiabei'
-$env:JIABEI_IT_DATABASE_PASSWORD='test'
+$env:JIABEI_IT_JDBC_URL='jdbc:postgresql://127.0.0.1:55432/jiabei_mock_it'
+$env:JIABEI_IT_DATABASE_USER = Read-Host '输入本机测试库用户'
+$env:JIABEI_IT_DATABASE_PASSWORD = Read-Host '输入本机测试库密码'
 cd src\backend
-mvn '-Dtest=ExternalPostgreSqlIT,CardMockExternalIT,ProductionMigrationExternalIT' test
+mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,ProductionMigrationExternalIT' test
 ```
 
 ## 配置与发布边界
