@@ -76,7 +76,8 @@ if ($dockerReady) {
       '--spring.datasource.url=jdbc:postgresql://127.0.0.1:55432/jiabei',
       '--spring.datasource.username=jiabei',
       '--spring.datasource.password=test',
-      '--server.port=8080'
+      '--server.port=8080',
+      '--jiabei.security.allowed-origins=http://127.0.0.1:5173,http://localhost:5173,http://192.168.0.4:5173'
     )
     $backend = Start-Process -FilePath $java -ArgumentList $backendArgs -WorkingDirectory $projectRoot `
       -WindowStyle Hidden -PassThru `
