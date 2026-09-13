@@ -47,10 +47,10 @@ public class AccountService {
       Map<String,Object> m=new LinkedHashMap<>();
       m.put("id",rs.getObject(1,UUID.class));m.put("username",rs.getString(2));
       m.put("dingTalkUserId",rs.getString(3));m.put("dingTalkUsername",rs.getString(4));
-      m.put("nickname",rs.getString(5));m.put("role",rs.getString(6));
+      m.put("nickname",rs.getString(5));String role=rs.getString(6);m.put("role",role);
       m.put("makeupArtistId",rs.getObject(7,UUID.class));m.put("active",rs.getBoolean(8));
       m.put("attending",rs.getBoolean(9));m.put("canModifyAppointments",rs.getBoolean(10));
-      m.put("canCancelAppointments",rs.getBoolean(11));m.put("canCreateAppointments",rs.getBoolean(12));m.put("mustChangePassword",rs.getBoolean(13));
+      m.put("canCancelAppointments",rs.getBoolean(11));m.put("canCreateAppointments",rs.getBoolean(12));boolean storedChange=rs.getBoolean(13);m.put("mustChangePassword","SUPER_ADMIN".equals(role)?!storedChange:storedChange);
       m.put("version",rs.getInt(14));m.put("updatedAt",rs.getObject(15));m.put("lastLoginAt",rs.getObject(16));return m;
     });
   }

@@ -25,7 +25,7 @@ class ComplexMockDataExternalIT {
     Flyway flyway = Flyway.configure().locations("classpath:db/migration", "classpath:db/local")
         .cleanDisabled(false).dataSource(URL, USER, PASSWORD).load();
     flyway.clean();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
+    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(9);
     jdbc = new JdbcTemplate(new DriverManagerDataSource(URL, USER, PASSWORD));
   }
 
@@ -69,7 +69,7 @@ class ComplexMockDataExternalIT {
           Integer.class, employee.userId(), employee.username())).isEqualTo(candidate ? 0 : 1);
     }
     assertThat(count("SELECT count(*) FROM app_user WHERE username ~ '^streamer(2[1-9]|30)$' AND dingtalk_user_id IS NULL AND dingtalk_username IS NULL AND password_hash IS NOT NULL")).isEqualTo(10);
-    assertThat(count("SELECT count(*) FROM app_user WHERE username='superadmin' AND id='10000000-0000-0000-0000-000000000001' AND password_hash='{noop}Admin123!' AND must_change_password")).isEqualTo(1);
+    assertThat(count("SELECT count(*) FROM app_user WHERE username='superadmin' AND id='10000000-0000-0000-0000-000000000001' AND password_hash='{noop}superadmin' AND NOT must_change_password")).isEqualTo(1);
     assertThat(count("SELECT count(*) FROM app_user WHERE (username,id::text) IN (('operator01','10000000-0000-0000-0000-000000000002'),('observer01','10000000-0000-0000-0000-000000000003'),('makeup01','10000000-0000-0000-0000-000000000004'),('streamer01','10000000-0000-0000-0000-000000000011'),('streamer02','10000000-0000-0000-0000-000000000012'),('streamer03','10000000-0000-0000-0000-000000000013'),('streamer04','10000000-0000-0000-0000-000000000014'))")).isEqualTo(7);
   }
 

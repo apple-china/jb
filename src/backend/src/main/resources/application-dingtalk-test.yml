@@ -4,12 +4,12 @@ spring:
     username: ${DINGTALK_TEST_DATABASE_USER:jiabei}
     password: ${DINGTALK_TEST_DATABASE_PASSWORD:test}
   flyway:
-    locations: classpath:db/migration
+    locations: classpath:db/migration,classpath:db/dingtalk-test
 jiabei:
   bootstrap:
     super-admin:
       username: ${SUPER_ADMIN_USERNAME:superadmin}
-      password: ${SUPER_ADMIN_INITIAL_PASSWORD:Admin123!}
+      password: ${SUPER_ADMIN_INITIAL_PASSWORD:superadmin}
       dingtalk-user-id: ${SUPER_ADMIN_DINGTALK_USER_ID:}
       nickname: ${SUPER_ADMIN_NICKNAME:Admin}
   dingtalk:

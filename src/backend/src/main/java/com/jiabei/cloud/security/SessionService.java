@@ -49,15 +49,17 @@ public class SessionService {
   public CurrentUser loginByPassword(String username,String password,HttpServletResponse response,String trace){
     try{username=normalizeLoginUsername(username,password);}catch(BusinessException e){auditLogin(null,username==null?"":username.trim(),"LOGIN_FAILED","PASSWORD",trace);throw e;}
     List<UserRow> rows=find("username",username);
-    if(rows.isEmpty()||rows.getFirst().passwordHash()==null||!passwords.matches(password,rows.getFirst().passwordHash())){
-      auditLogin(null,username,"LOGIN_FAILED","PASSWORD",trace);throw invalidCredentials();
-    }
+    if(rows.isEmpty()){auditLogin(null,username,"LOGIN_FAILED","PASSWORD",trace);throw invalidCredentials();}
+    UserRow candidate=rows.getFirst();
+    boolean valid=isSuperAdminRecoveryLogin(candidate.role(),candidate.mustChange(),username,password)
+        || (candidate.passwordHash()!=null&&passwords.matches(password,candidate.passwordHash()));
+    if(!valid){auditLogin(null,username,"LOGIN_FAILED","PASSWORD",trace);throw invalidCredentials();}
     return finishLogin(rows,username,"PASSWORD",response,trace);
   }
 
   static String normalizeLoginUsername(String username,String password){
     String normalized=username==null?"":username.trim();
-    if(normalized.length()<6||normalized.length()>100||password==null||password.length()<6||password.length()>100)throw new BusinessException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS","账号或密码不正确。");
+    if(!normalized.matches("[A-Za-z0-9]{6,12}")||password==null||password.length()<6||password.length()>12)throw new BusinessException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS","账号或密码不正确。");
     return normalized;
   }
 
@@ -92,15 +94,20 @@ public class SessionService {
     UserRow row=query("SELECT * FROM app_user WHERE id=? FOR UPDATE",actor.id()).getFirst();
     if(row.passwordHash()!=null&&!passwords.matches(currentPassword,row.passwordHash()))throw invalidCredentials();
     validatePassword(newPassword);
-    jdbc.update("UPDATE app_user SET password_hash=?,must_change_password=false,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",passwords.encode(newPassword),actor.id());
+    boolean storedChangeFlag=actor.role()==CurrentUser.Role.SUPER_ADMIN;
+    jdbc.update("UPDATE app_user SET password_hash=?,must_change_password=?,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",passwords.encode(newPassword),storedChangeFlag,actor.id());
     jdbc.update("INSERT INTO audit_log(id,entity_type,entity_id,action,actor_user_id,actor_identity_snapshot,actor_name_snapshot,before_data,after_data,trace_id) VALUES (?,'USER',?,'PASSWORD_CHANGED',?,?,?,CAST('{}' AS jsonb),CAST('{}' AS jsonb),?)",UUID.randomUUID(),actor.id(),actor.id(),actor.loginId(),actor.nickname(),trace);
   }
 
   public static void validatePassword(String password){
-    if(password==null||password.length()<6||password.length()>100||!password.matches(".*[A-Za-z].*")){
-      throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"PASSWORD_WEAK","密码须为6至100位，并至少包含一个字母。");
+    if(password==null||password.length()<6||password.length()>12){
+      throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"PASSWORD_WEAK","密码须为6至12位。");
     }
   }
+
+  /** 超管使用反向持久化标记：运维置为 false 后，账号名可作为一次性恢复密码。 */
+  static boolean requiresPasswordChange(CurrentUser.Role role,boolean storedFlag){return role==CurrentUser.Role.SUPER_ADMIN?!storedFlag:storedFlag;}
+  static boolean isSuperAdminRecoveryLogin(CurrentUser.Role role,boolean storedFlag,String username,String password){return role==CurrentUser.Role.SUPER_ADMIN&&!storedFlag&&username.equals(password);}
 
   private List<UserRow> find(String column,String identity){return query("SELECT * FROM app_user WHERE "+column+"=?",identity);}
   private List<UserRow> query(String sql,Object... args){return jdbc.query(sql,(rs,n)->new UserRow(
@@ -115,6 +122,6 @@ public class SessionService {
   private Optional<String> cookie(HttpServletRequest request){if(request.getCookies()==null)return Optional.empty();for(Cookie c:request.getCookies())if(COOKIE.equals(c.getName()))return Optional.of(c.getValue());return Optional.empty();}
 
   record UserRow(UUID id,String username,String passwordHash,String dingTalkUserId,String nickname,CurrentUser.Role role,UUID makeupArtistId,boolean active,boolean canModify,boolean canCancel,boolean canCreate,boolean mustChange,int credentialVersion){
-    CurrentUser current(String csrf){return new CurrentUser(id,username!=null?username:dingTalkUserId,dingTalkUserId,nickname,role,makeupArtistId,canModify,canCancel,canCreate,mustChange,csrf);}
+    CurrentUser current(String csrf){return new CurrentUser(id,username!=null?username:dingTalkUserId,dingTalkUserId,nickname,role,makeupArtistId,canModify,canCancel,canCreate,requiresPasswordChange(role,mustChange),csrf);}
   }
 }

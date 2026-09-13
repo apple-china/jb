@@ -189,10 +189,10 @@ public class OpenApiDocumentation {
     Map<String,Spec> m=new LinkedHashMap<>();
     add(m,HttpMethod.GET,"/api/v1/me","获取当前用户","返回当前会话用户、角色、权限和 CSRF 令牌。登录后可用；首次修改密码期间仍允许调用。","认证与会话",OpenApiModels.CurrentUser.class,false,false,ErrorProfile.READ,"获取成功。","");
     add(m,HttpMethod.POST,"/api/v1/logout","退出登录","销毁当前会话并清除 JBY_SESSION Cookie。","认证与会话",Void.class,false,false,ErrorProfile.WRITE,"退出成功。","无需请求体。");
-    add(m,HttpMethod.POST,"/api/v1/auth/password-login","账号密码登录","账号去除首尾空格后为 6–100 位，密码为 6–100 位；成功后写入会话 Cookie。","认证与会话",OpenApiModels.CurrentUser.class,false,false,ErrorProfile.LOGIN,"登录成功。","提交密码登录凭据。");
+    add(m,HttpMethod.POST,"/api/v1/auth/password-login","账号密码登录","账号去除首尾空格后为 6–12 位字母或数字，密码为 6–12 位；成功后写入会话 Cookie。","认证与会话",OpenApiModels.CurrentUser.class,false,false,ErrorProfile.LOGIN,"登录成功。","提交密码登录凭据。");
     add(m,HttpMethod.POST,"/api/v1/auth/dingtalk-login","钉钉免登","使用钉钉授权码换取系统会话；授权码由钉钉客户端提供。","认证与会话",OpenApiModels.CurrentUser.class,false,false,ErrorProfile.LOGIN,"登录成功。","提交钉钉免登授权信息。");
     add(m,HttpMethod.POST,"/api/v1/auth/mock-login","本地模拟登录","仅 Local/Test Profile 可用；按预置身份创建模拟会话，不得用于生产环境。","本地调试",OpenApiModels.CurrentUser.class,false,false,ErrorProfile.LOGIN,"模拟登录成功。","提交预置 Mock 用户标识。");
-    add(m,HttpMethod.POST,"/api/v1/auth/change-password","修改首次密码","修改当前密码。新密码为 6–100 位且至少包含一个字母；成功后解除首次改密限制并使旧凭据版本失效。","认证与会话",Void.class,false,false,ErrorProfile.WRITE,"密码修改成功。","提交当前密码和新密码。");
+    add(m,HttpMethod.POST,"/api/v1/auth/change-password","修改首次密码","修改当前密码。新密码为 6–12 位；成功后解除首次改密限制并使旧凭据版本失效。","认证与会话",Void.class,false,false,ErrorProfile.WRITE,"密码修改成功。","提交当前密码和新密码。");
 
     add(m,HttpMethod.GET,"/api/v1/booking-context","获取预约页面上下文","返回选中日期、推荐日期、本人预约、日程、资源、默认选择和规则。日期按上海时区解释。","预约",OpenApiModels.BookingContext.class,false,false,ErrorProfile.READ,"上下文获取成功。","");
     add(m,HttpMethod.GET,"/api/v1/availability","查询化妆师可用时段","按 10 分钟步长返回化妆师在指定日期的时段和不可用原因；排班关闭时覆盖全天时段。","预约",OpenApiModels.Availability.class,false,false,ErrorProfile.READ,"时段查询成功。","");

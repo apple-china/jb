@@ -8,6 +8,17 @@ declare global {
   }
 }
 
+export function currentDingTalkCorpId(){
+  const fromUrl=new URLSearchParams(window.location.search).get('corpid')?.trim()
+  const configured=import.meta.env.VITE_DINGTALK_CORP_ID?.trim()
+  return fromUrl||configured||'CORPID'
+}
+
+export function missingAuthCodeMessage(corpId=currentDingTalkCorpId(),now=new Date()){
+  const part=(value:number)=>String(value).padStart(2,'0')
+  return `${part(now.getHours())}:${part(now.getMinutes())}:${part(now.getSeconds())} 未获取到免登码:${corpId}`
+}
+
 export async function requestDingTalkAuthCode(){
   if(!window.dd?.requestAuthCode)throw new DingTalkClientError('NOT_IN_DINGTALK','请在钉钉内打开后使用免登。')
   const clientId=import.meta.env.VITE_DINGTALK_CLIENT_ID?.trim()
