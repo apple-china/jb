@@ -4,7 +4,7 @@ ARG VITE_DINGTALK_CLIENT_ID=
 ARG VITE_DINGTALK_CORP_ID=
 ENV VITE_DINGTALK_CLIENT_ID=$VITE_DINGTALK_CLIENT_ID
 ENV VITE_DINGTALK_CORP_ID=$VITE_DINGTALK_CORP_ID
-RUN corepack enable
+RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm@11.19.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
