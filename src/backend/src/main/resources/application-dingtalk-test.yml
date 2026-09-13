@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: ${DINGTALK_TEST_DATABASE_URL:jdbc:postgresql://127.0.0.1:55432/jiabei_dingtalk_test}
+    username: ${DINGTALK_TEST_DATABASE_USER:jiabei}
+    password: ${DINGTALK_TEST_DATABASE_PASSWORD:test}
+  flyway:
+    locations: classpath:db/migration
+jiabei:
+  bootstrap:
+    super-admin:
+      username: ${SUPER_ADMIN_USERNAME:superadmin}
+      password: ${SUPER_ADMIN_INITIAL_PASSWORD:Admin123!}
+      dingtalk-user-id: ${SUPER_ADMIN_DINGTALK_USER_ID:}
+      nickname: ${SUPER_ADMIN_NICKNAME:Admin}
+  dingtalk:
+    client-id: ${DINGTALK_CLIENT_ID:}
+    client-secret: ${DINGTALK_CLIENT_SECRET:}
+    app-id: ${DINGTALK_APP_ID:}
+    agent-id: ${DINGTALK_AGENT_ID:}
+    sync-interval-ms: ${DINGTALK_SYNC_INTERVAL_MS:300000}

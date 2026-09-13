@@ -78,6 +78,12 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 ## 配置与发布边界
 
+### 钉钉测试环境
+
+`dingtalk-test` 使用独立数据库 `jiabei_dingtalk_test` 和生产迁移，不加载 V7 Mock 数据；首次启动仅创建一个未绑定钉钉 ID 的超管。设置 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET` 后，后端启动时及每 5 分钟全量核对通讯录，离职员工逻辑删除并停用已关联账号。密钥只允许由进程环境注入。
+
+前端构建设置 `VITE_ENABLE_MOCK_LOGIN=false`、`VITE_DINGTALK_AUTO_LOGIN=true`；仅验收环境可设置 `VITE_DINGTALK_TEST_DIAGNOSTICS=true`。该环境保留账号密码和钉钉免登，但不显示固定角色快捷登录，也不允许在设置页点击人员切换身份。
+
 - 时区固定 `Asia/Shanghai`；身份、资格、次数、冲突和边界时间均由服务端判定。
 - 会话使用 HttpOnly Cookie，写请求校验 CSRF 与 Origin；停用、解绑和改密会使旧会话失效。
 - 图片仅允许真实 PNG/JPG，最大 2 MB、最大边长 4096，服务端生成随机文件名。

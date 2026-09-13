@@ -18,7 +18,7 @@ export async function requestDingTalkAuthCode(){
   const corpId=configuredCorpId||urlCorpId!
   const authCode=await new Promise<string>((resolve,reject)=>window.dd!.requestAuthCode({
     clientId,corpId,
-    success:result=>result.code?resolve(result.code):reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到钉钉免登码，请重试。')),
+    success:result=>result.code?resolve(result.code):reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')),
     fail:()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')),
   }))
   return {authCode,corpId}

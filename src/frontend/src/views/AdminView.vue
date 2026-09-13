@@ -20,6 +20,7 @@ import { formatLastSeen } from '../utils/lastSeen'
 
 const router = useRouter()
 const { toast, showToast, showApiError } = useAppToast()
+const mockLoginEnabled = import.meta.env.VITE_ENABLE_MOCK_LOGIN !== 'false' && import.meta.env.MODE !== 'production'
 const user = ref<CurrentUser | null>(null)
 const tab = ref<'appointments' | 'create' | 'settings'>('appointments')
 const loading = ref(true)
@@ -137,7 +138,7 @@ function dateTime(value?: string) { return value ? new Intl.DateTimeFormat('zh-C
 function roleLabel(value: string) { return ({ SUPER_ADMIN: '超管', OPERATOR: '运营', OBSERVER: '观察员', MAKEUP: '化妆师', STREAMER: '主播' } as Record<string, string>)[value] ?? value }
 function roleAvatarClass(role?: string) { return role === 'STREAMER' ? 'avatar-streamer' : role === 'MAKEUP' ? 'avatar-makeup' : 'avatar-system' }
 function makeupArtistAccount(makeupArtistId: string) { return accounts.value.find(account => account.makeupArtistId === makeupArtistId) }
-function canTestSwitch(account: any) { return !!account && (!!user.value?.testMode || ['127.0.0.1', 'localhost'].includes(window.location.hostname)) && !!(account.dingTalkUserId || account.username) }
+function canTestSwitch(account: any) { return mockLoginEnabled && !!account && !!(account.dingTalkUserId || account.username) }
 async function switchTestAccount(account: any) {
   if (!canTestSwitch(account)) return
   try {

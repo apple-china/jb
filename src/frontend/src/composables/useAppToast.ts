@@ -6,10 +6,10 @@ export interface ToastState { message:string;kind:ToastKind }
 export function useAppToast(duration=1000){
   const toast=ref<ToastState>({message:'',kind:'info'})
   let timer:ReturnType<typeof setTimeout>|undefined
-  function showToast(message:string,kind:ToastKind='info'){
+  function showToast(message:string,kind:ToastKind='info',messageDuration=duration){
     if(timer)clearTimeout(timer)
     toast.value={message,kind}
-    timer=setTimeout(()=>{toast.value={message:'',kind}},duration)
+    timer=setTimeout(()=>{toast.value={message:'',kind}},messageDuration)
   }
   function showApiError(error:unknown,fallback:string){
     const candidate=error as {message?:string;status?:number;code?:string}
