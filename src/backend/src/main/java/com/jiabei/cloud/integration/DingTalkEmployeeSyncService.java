@@ -36,7 +36,9 @@ public class DingTalkEmployeeSyncService implements ApplicationRunner {
 
   @Override public void run(ApplicationArguments args) { safeSynchronize(); }
 
-  @Scheduled(fixedDelayString = "${jiabei.dingtalk.sync-interval-ms:300000}")
+  @Scheduled(
+      initialDelayString = "${jiabei.dingtalk.sync-interval-ms:300000}",
+      fixedDelayString = "${jiabei.dingtalk.sync-interval-ms:300000}")
   public void safeSynchronize() {
     try { synchronize(); }
     catch (Exception error) { log.warn("DingTalk directory synchronization failed: {}", error.getMessage()); }
