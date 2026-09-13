@@ -1,9 +1,12 @@
 FROM maven:3.9.11-eclipse-temurin-21 AS build
 WORKDIR /workspace
+
+COPY settings.xml /root/.m2/settings.xml
 COPY pom.xml ./
-RUN mvn -q -DskipTests dependency:go-offline
+RUN mvn -B -DskipTests dependency:go-offline
+
 COPY src ./src
-RUN mvn -q -DskipTests package
+RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
