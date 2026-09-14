@@ -53,7 +53,10 @@ class DingTalkCardGatewayTest {
               "userIdType":1,
               "cardData":{"cardParamMap":{"title":"安排"}},
               "privateData":{"user-1":{"cardParamMap":{"my_appointment":"08:00"}}},
-              "imGroupOpenSpaceModel":{"supportForward":false},
+              "imGroupOpenSpaceModel":{
+                "supportForward":false,
+                "lastMessageI18n":{"ZH_CN":"化妆预约卡片 周一"}
+              },
               "imGroupOpenDeliverModel":{"robotCode":"robot-code"}
             }
             """, false))

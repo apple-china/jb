@@ -55,7 +55,11 @@ public class DingTalkCardGateway implements CardGateway {
     Map<String, Object> body = commonBody(payload);
     body.put("cardTemplateId", templateId);
     body.put("openSpaceId", "dtv1.card//IM_GROUP." + groupId);
-    body.put("imGroupOpenSpaceModel", Map.of("supportForward", false));
+    Map<String, Object> groupSpace = new LinkedHashMap<>();
+    groupSpace.put("supportForward", false);
+    groupSpace.put("lastMessageI18n", Map.of(
+        "ZH_CN", "化妆预约卡片 " + chineseWeekday(payload.businessDate())));
+    body.put("imGroupOpenSpaceModel", groupSpace);
     body.put("imGroupOpenDeliverModel", Map.of("robotCode", robotCode));
     exchange("POST", "/v1.0/card/instances/createAndDeliver", body);
   }
@@ -114,6 +118,17 @@ public class DingTalkCardGateway implements CardGateway {
     }
   }
 
+  private static String chineseWeekday(java.time.LocalDate date) {
+    return "周" + switch (date.getDayOfWeek()) {
+      case MONDAY -> "一";
+      case TUESDAY -> "二";
+      case WEDNESDAY -> "三";
+      case THURSDAY -> "四";
+      case FRIDAY -> "五";
+      case SATURDAY -> "六";
+      case SUNDAY -> "日";
+    };
+  }
   private static String valueOrDefault(String value, String fallback) {
     return value == null || value.isBlank() ? fallback : value;
   }

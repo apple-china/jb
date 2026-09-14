@@ -1,13 +1,17 @@
 package com.jiabei.cloud.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jiabei.cloud.config.BookingProperties;
 import com.jiabei.cloud.integration.CardGateway.CardPayload;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,16 +19,24 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CardProjectionService {
-  private static final DateTimeFormatter DATE_LABEL =
-      DateTimeFormatter.ofPattern("MM-dd EEEE", Locale.CHINA);
+  private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MM-dd");
   private static final DateTimeFormatter UPDATE_TIME = DateTimeFormatter.ofPattern("HH:mm");
+  private static final String NORMAL_LIGHT = "#1F2329";
+  private static final String NORMAL_DARK = "#F5F5F5";
+  private static final String PAST_LIGHT = "#A6AAB3";
+  private static final String PAST_DARK = "#7C818B";
 
   private final JdbcTemplate jdbc;
   private final BookingProperties props;
+  private final Clock clock;
+  private final ObjectMapper json;
 
-  public CardProjectionService(JdbcTemplate jdbc, BookingProperties props) {
+  public CardProjectionService(
+      JdbcTemplate jdbc, BookingProperties props, Clock clock, ObjectMapper json) {
     this.jdbc = jdbc;
     this.props = props;
+    this.clock = clock;
+    this.json = json;
   }
 
   public CardPayload projectSchedule(LocalDate date, String group) {
@@ -32,26 +44,35 @@ public class CardProjectionService {
         "SELECT out_track_id,content_version FROM daily_card WHERE business_date=? AND group_open_conversation_id=?",
         date, group);
 
-    List<String> lines = jdbc.query("""
-        SELECT to_char(start_at AT TIME ZONE 'Asia/Shanghai','HH24:MI')
-               || '　' || streamer_name_snapshot
-               || ' ' || makeup_artist_name_snapshot
-               || ' · ' || team_name_snapshot
-               || CASE WHEN conflict_override THEN ' ⚠冲突例外' ELSE '' END
+    ZonedDateTime now = ZonedDateTime.now(clock);
+    List<Map<String, Object>> appointments = jdbc.query("""
+        SELECT to_char(start_at AT TIME ZONE 'Asia/Shanghai','HH24:MI') AS start_time,
+               streamer_name_snapshot,makeup_artist_name_snapshot,team_name_snapshot,
+               attendance_status,start_at
         FROM appointment
         WHERE booking_date=? AND status='ACTIVE'
         ORDER BY start_at
-        """, (rs, rowNum) -> rs.getString(1), date);
+        """, (rs, rowNum) -> {
+          ZonedDateTime start = rs.getObject("start_at", OffsetDateTime.class)
+              .atZoneSameInstant(props.zoneId());
+          return appointmentItem(
+              rs.getString("start_time"),
+              rs.getString("streamer_name_snapshot"),
+              rs.getString("attendance_status"),
+              rs.getString("makeup_artist_name_snapshot"),
+              rs.getString("team_name_snapshot"),
+              now.isAfter(start.plusMinutes(20)));
+        }, date);
 
     Map<String, String> publicData = new LinkedHashMap<>();
-    publicData.put("title", "加贝云·化妆预约");
-    publicData.put("date_text", date.format(DATE_LABEL));
-    publicData.put("update_time", LocalDateTime.now(props.zoneId()).format(UPDATE_TIME));
-    publicData.put("schedule_markdown", lines.isEmpty() ? "当天暂时没有预约" : String.join("\n\n", lines));
-    publicData.put("summary", String.valueOf(lines.size()));
-    publicData.put("login_url", props.appEntryUrl());
+    publicData.put("data_date", date.format(DATE) + " " + chineseWeekday(date));
+    publicData.put("update_time", "更新于" + LocalDateTime.now(clock).format(UPDATE_TIME));
+    // 钉钉 cardParamMap 的对象数组必须以 JSON 字符串传递。
+    publicData.put("appointment_list", toJson(appointments));
+    publicData.put("summary", String.valueOf(appointments.size()));
 
     Map<String, Map<String, String>> privateData = new LinkedHashMap<>();
+    boolean pastDate = date.isBefore(LocalDate.now(clock));
     jdbc.query("""
         SELECT u.dingtalk_user_id,u.role,
                to_char(a.start_at AT TIME ZONE 'Asia/Shanghai','HH24:MI') AS start_time,
@@ -68,15 +89,23 @@ public class CardProjectionService {
         ORDER BY u.dingtalk_user_id
         """, rs -> {
           String startTime = rs.getString("start_time");
-          boolean canEnterBooking = "STREAMER".equals(rs.getString("role")) && startTime == null;
-          String appointment = startTime == null ? "" : startTime + "　"
-              + rs.getString("makeup_artist_name_snapshot") + " · " + rs.getString("team_name_snapshot");
+          boolean hasAppointment = startTime != null;
+          boolean canStartBooking = "STREAMER".equals(rs.getString("role"))
+              && !hasAppointment && !pastDate;
 
-          // 钉钉卡片按用户覆盖按钮：仅当天未预约的主播进入预约，其余身份只查看预约。
           Map<String, String> userData = new LinkedHashMap<>();
-          userData.put("my_appointment", appointment);
-          userData.put("login_button", canEnterBooking ? "进入预约" : "查看预约");
-          userData.put("login_button_color", canEnterBooking ? "gold" : "blue");
+          userData.put("my_visible", String.valueOf(hasAppointment));
+          userData.put("my_time", hasAppointment ? startTime : "");
+          userData.put("my_makeup_artist", hasAppointment
+              ? abbreviate(rs.getString("makeup_artist_name_snapshot"), 4) : "");
+          userData.put("my_team", hasAppointment
+              ? abbreviate(rs.getString("team_name_snapshot"), 4) : "");
+          userData.put("login_button_text", canStartBooking ? "开始预约" : "查看详情");
+          userData.put("login_button_color", "gold");
+          userData.put("login_button_icon",
+              canStartBooking ? "icon_position" : "icon_cloud_tray_filled");
+          userData.put("login_button_url", props.appEntryUrl());
+          userData.put("login_button_visible", String.valueOf(!pastDate));
           privateData.put(rs.getString("dingtalk_user_id"), userData);
         }, date);
 
@@ -88,6 +117,74 @@ public class CardProjectionService {
         publicData,
         privateData,
         ((Number) card.get("content_version")).longValue());
+  }
+
+  static Map<String, Object> appointmentItem(
+      String time,
+      String streamer,
+      String attendanceStatus,
+      String makeupArtist,
+      String team,
+      boolean past) {
+    String status = switch (attendanceStatus) {
+      case "ARRIVED" -> "签到";
+      case "NOT_ARRIVED" -> "未到";
+      case "LATE" -> "迟到";
+      default -> "";
+    };
+    boolean statusVisible = !status.isEmpty();
+    String statusColor = past ? "gray" : switch (attendanceStatus) {
+      case "ARRIVED" -> "green";
+      case "NOT_ARRIVED" -> "red";
+      case "LATE" -> "orange";
+      default -> "blue";
+    };
+
+    Map<String, Object> item = new LinkedHashMap<>();
+    item.put("time", time);
+    item.put("streamer", abbreviate(streamer, 3));
+    item.put("status", status);
+    item.put("makeup_artist", abbreviate(makeupArtist, 4));
+    item.put("team", abbreviate(team, 4));
+    item.put("row_light_color", past ? PAST_LIGHT : NORMAL_LIGHT);
+    item.put("row_dark_color", past ? PAST_DARK : NORMAL_DARK);
+    item.put("status_color", statusColor);
+    item.put("status_visible", statusVisible);
+    item.put("status_placeholder_visible", !statusVisible);
+    return item;
+  }
+
+  private static String abbreviate(String value, int maxCodePoints) {
+    if (value == null || value.isBlank()) {
+      return "";
+    }
+    String text = value.trim();
+    int count = text.codePointCount(0, text.length());
+    if (count <= maxCodePoints) {
+      return text;
+    }
+    int end = text.offsetByCodePoints(0, maxCodePoints);
+    return text.substring(0, end) + "..";
+  }
+
+  private String toJson(Object value) {
+    try {
+      return json.writeValueAsString(value);
+    } catch (JsonProcessingException error) {
+      throw new IllegalStateException("无法生成钉钉卡片数据。", error);
+    }
+  }
+
+  private static String chineseWeekday(LocalDate date) {
+    return "周" + switch (date.getDayOfWeek()) {
+      case MONDAY -> "一";
+      case TUESDAY -> "二";
+      case WEDNESDAY -> "三";
+      case THURSDAY -> "四";
+      case FRIDAY -> "五";
+      case SATURDAY -> "六";
+      case SUNDAY -> "日";
+    };
   }
 
   public CardPayload projectLate(UUID appointmentId) {
@@ -104,8 +201,10 @@ public class CardProjectionService {
     Map<String, String> data = new LinkedHashMap<>();
     data.put("title", "化妆签到提醒");
     data.put("reminder_markdown", "<a atId=" + dingTalkUserId + ">" + streamerName
-        + "</a> 您预约的化妆时间为" + row.get("start_time") + "，目前尚未检测到有效门禁记录，请尽快前往。");
-    data.put("appointment_text", row.get("makeup_artist_name_snapshot") + " · " + row.get("team_name_snapshot"));
+        + "</a> 您预约的化妆时间为" + row.get("start_time")
+        + "，目前尚未检测到有效门禁记录，请尽快前往。");
+    data.put("appointment_text",
+        row.get("makeup_artist_name_snapshot") + " · " + row.get("team_name_snapshot"));
     data.put("at_user_id", dingTalkUserId);
     data.put("at_user_name", streamerName);
     data.put("entry_url", props.appEntryUrl());

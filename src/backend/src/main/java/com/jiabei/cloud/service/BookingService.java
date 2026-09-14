@@ -191,7 +191,27 @@ public class BookingService {
    * 只在本地事务中更新卡片版本并写入 Outbox；进入队列不代表发送成功。
    * 实际成功状态由 {@link CardOutboxWorker} 在网关调用成功后写入。
    */
-  private void ensureScheduleCard(LocalDate date,boolean allowEmpty){if(!allowEmpty){Integer active=jdbc.queryForObject("SELECT count(*) FROM appointment WHERE booking_date=? AND status='ACTIVE'",Integer.class,date);if(active==null||active==0)return;}String business=props.groupId()+"|"+date;String out="schedule-card-"+date+"-"+Integer.toHexString(props.groupId().hashCode());jdbc.update("INSERT INTO daily_card(id,business_date,group_open_conversation_id,out_track_id,template_id,status,content_version) VALUES (?,?,?,?,?,'PENDING',1) ON CONFLICT(group_open_conversation_id,business_date) DO UPDATE SET content_version=daily_card.content_version+1,updated_at=now()",UUID.randomUUID(),date,props.groupId(),out,props.cardTemplateId());enqueue("CARD_REFRESH",business,Map.of("businessDate",date,"groupId",props.groupId()));}
+  private void ensureScheduleCard(LocalDate date,boolean allowEmpty){
+    if(!allowEmpty){
+      Integer active=jdbc.queryForObject("SELECT count(*) FROM appointment WHERE booking_date=? AND status='ACTIVE'",Integer.class,date);
+      if(active==null||active==0)return;
+    }
+    String business=props.groupId()+"|"+date;
+    String out="schedule-card-"+date+"-"+Integer.toHexString(Objects.hash(props.groupId(),props.cardTemplateId()));
+    jdbc.update("""
+        INSERT INTO daily_card(id,business_date,group_open_conversation_id,out_track_id,template_id,status,content_version)
+        VALUES (?,?,?,?,?,'PENDING',1)
+        ON CONFLICT(group_open_conversation_id,business_date) DO UPDATE SET
+          out_track_id=CASE WHEN daily_card.template_id<>excluded.template_id THEN excluded.out_track_id ELSE daily_card.out_track_id END,
+          template_id=excluded.template_id,
+          status=CASE WHEN daily_card.template_id<>excluded.template_id THEN 'PENDING' ELSE daily_card.status END,
+          content_version=daily_card.content_version+1,
+          delivered_version=CASE WHEN daily_card.template_id<>excluded.template_id THEN 0 ELSE daily_card.delivered_version END,
+          last_error_code=CASE WHEN daily_card.template_id<>excluded.template_id THEN 'TEMPLATE_CHANGED' ELSE daily_card.last_error_code END,
+          updated_at=now()
+        """,UUID.randomUUID(),date,props.groupId(),out,props.cardTemplateId());
+    enqueue("CARD_REFRESH",business,Map.of("businessDate",date,"groupId",props.groupId()));
+  }
   private void refreshScheduleCard(LocalDate date){Integer exists=jdbc.queryForObject("SELECT count(*) FROM daily_card WHERE business_date=? AND group_open_conversation_id=?",Integer.class,date,props.groupId());if(exists!=null&&exists>0)ensureScheduleCard(date,true);}
   private void enqueue(String type,String key,Object payload){jdbc.update("INSERT INTO integration_job(id,job_type,business_key,payload,status,max_attempts) VALUES (?,?,?,CAST(? AS jsonb),'PENDING',?) ON CONFLICT (job_type,business_key) WHERE status IN ('PENDING','RUNNING','RETRY_WAIT') DO UPDATE SET payload=excluded.payload,next_attempt_at=now(),updated_at=now()",UUID.randomUUID(),type,key,toJson(payload),props.outboxMaxAttempts());}
   private BusinessException constraint(DataIntegrityViolationException e){String message=Objects.toString(e.getMostSpecificCause().getMessage(),"");if(message.contains("uq_active_appointment_streamer_date"))return new BusinessException(HttpStatus.CONFLICT,"DAILY_APPOINTMENT_EXISTS","该主播在这一天已有有效预约。");return new BusinessException(HttpStatus.CONFLICT,"BOOKING_CONFLICT","预约条件已发生变化，请刷新后重试。");}

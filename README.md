@@ -101,7 +101,7 @@ docker compose --env-file .env.dingtalk-test \
 
 覆盖文件把后端切换为 `dingtalk-test`，并挂载独立的 `jiabei_dingtalk_test` 数据卷；现有开发库卷不会被清除。新测试卷只运行生产迁移并引导一个 `superadmin`。前端镜像会关闭角色快捷登录、自动尝试钉钉免登并开启验收诊断。以后更新仍使用同一组 `--env-file/-f` 参数，避免误回到默认 `local` 环境；密钥文件不得提交。
 
-真实群卡片使用 `DINGTALK_GROUP_OPEN_CONVERSATION_ID` 定位群（群名不能代替会话 ID），使用 `DINGTALK_CARD_TEMPLATE_ID` 指定安排模板；模板须包含 `title`、`date_text`、`schedule_markdown`、`summary`、`entry_url` 公共参数和 `my_appointment` 私有参数。机器人需已加入目标群并具有互动卡片权限。`APP_ENTRY_URL` 必须填写测试站点的 HTTPS 预约页地址。实际网关成功后才记录首次送达，重发会更新同一业务卡片。
+真实群卡片使用 `DINGTALK_GROUP_OPEN_CONVERSATION_ID` 定位群（群名不能代替会话 ID），使用 `DINGTALK_CARD_TEMPLATE_ID` 指定安排模板；当前排班模板 ID 为 671d2cf1-a84f-4a2d-bab4-8450147c45ef.schema。模板使用 data_date、update_time、appointment_list、summary 公共参数，以及 my_visible、my_time、my_makeup_artist、my_team 和 login_button_* 私有参数。机器人需已加入目标群并具有互动卡片权限。`APP_ENTRY_URL` 必须填写测试站点的 HTTPS 预约页地址。实际网关成功后才记录首次送达，重发会更新同一业务卡片。
 
 - 时区固定 `Asia/Shanghai`；身份、资格、次数、冲突和边界时间均由服务端判定。
 - 会话使用 HttpOnly Cookie，写请求校验 CSRF 与 Origin；停用、解绑和改密会使旧会话失效。
