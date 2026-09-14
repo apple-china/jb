@@ -67,6 +67,53 @@ class DingTalkCardGatewayTest {
   }
 
   @Test
+  void deliversLateReminderWithAGroupMention() {
+    server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances/createAndDeliver"))
+        .andExpect(method(HttpMethod.POST))
+        .andExpect(content().json("""
+            {
+              "cardAtUserIds":["streamer-1"],
+              "imGroupOpenDeliverModel":{
+                "robotCode":"robot-code",
+                "atUserIds":{"streamer-1":"玲玲"}
+              }
+            }
+            """, false))
+        .andRespond(withSuccess());
+
+    gateway.create(new CardPayload(
+        "late-1", "group-1", "late-template", LocalDate.of(2026, 9, 14),
+        Map.of(
+            "reminder_markdown", "@玲玲 姐姐，请尽快签到 ✨",
+            "at_user_id", "streamer-1",
+            "at_user_name", "玲玲"),
+        Map.of(), 1));
+    server.verify();
+  }
+  @Test
+  void fallsBackToVisibleGroupTextWhenNoLateTemplateIsConfigured() {
+    server.expect(requestTo("https://api.dingtalk.test/v1.0/robot/groupMessages/send"))
+        .andExpect(method(HttpMethod.POST))
+        .andExpect(content().json("""
+            {
+              "robotCode":"robot-code",
+              "openConversationId":"group-1",
+              "msgKey":"sampleText",
+              "msgParam":"{\\\"content\\\":\\\"@玲玲 姐姐，请尽快签到 ✨\\\"}"
+            }
+            """, false))
+        .andRespond(withSuccess());
+
+    gateway.create(new CardPayload(
+        "late-1", "group-1", "", LocalDate.of(2026, 9, 14),
+        Map.of(
+            "reminder_markdown", "<a atId=streamer-1>玲玲</a> 姐姐，请尽快签到 ✨",
+            "at_user_id", "streamer-1",
+            "at_user_name", "玲玲"),
+        Map.of(), 1));
+    server.verify();
+  }
+  @Test
   void updatesCardDataByBusinessKey() {
     server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances"))
         .andExpect(method(HttpMethod.PUT))

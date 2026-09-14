@@ -48,7 +48,7 @@ jiabei:
     late-grace-minutes: 10
     group-id: ${DINGTALK_GROUP_OPEN_CONVERSATION_ID:mock-group-001}
     card-template-id: ${DINGTALK_CARD_TEMPLATE_ID:mock-schedule-template}
-    late-card-template-id: ${DINGTALK_LATE_CARD_TEMPLATE_ID:mock-late-template}
+    late-card-template-id: ${DINGTALK_LATE_CARD_TEMPLATE_ID:}
     app-entry-url: ${APP_ENTRY_URL:http://127.0.0.1:5173/booking}
     outbox-max-attempts: 5
   security:

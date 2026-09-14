@@ -1,8 +1,12 @@
 package com.jiabei.cloud.integration;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.jiabei.cloud.config.BookingProperties;
 import com.jiabei.cloud.integration.CardGateway.CardPayload;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -22,6 +26,7 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class DingTalkCardGateway implements CardGateway {
   private static final String TOKEN_HEADER = "x-acs-dingtalk-access-token";
+  private static final ObjectMapper JSON = new ObjectMapper();
   private final DingTalkOpenApiClient client;
   private final DingTalkProperties properties;
   private final BookingProperties booking;
@@ -49,9 +54,15 @@ public class DingTalkCardGateway implements CardGateway {
 
   @Override
   public void create(CardPayload payload) {
-    String templateId = required(valueOrDefault(payload.templateId(), booking.cardTemplateId()), "卡片模板 ID");
     String groupId = required(payload.groupId(), "群会话 ID");
     String robotCode = required(properties.getClientId(), "机器人编码");
+    String atUserId = payload.cardData().get("at_user_id");
+    if (atUserId != null && !atUserId.isBlank()
+        && (payload.templateId() == null || payload.templateId().isBlank())) {
+      sendLateReminderText(payload, groupId, robotCode, atUserId);
+      return;
+    }
+    String templateId = required(valueOrDefault(payload.templateId(), booking.cardTemplateId()), "卡片模板 ID");
     Map<String, Object> body = commonBody(payload);
     body.put("cardTemplateId", templateId);
     body.put("openSpaceId", "dtv1.card//IM_GROUP." + groupId);
@@ -60,10 +71,34 @@ public class DingTalkCardGateway implements CardGateway {
     groupSpace.put("lastMessageI18n", Map.of(
         "ZH_CN", "化妆预约卡片 " + chineseWeekday(payload.businessDate())));
     body.put("imGroupOpenSpaceModel", groupSpace);
-    body.put("imGroupOpenDeliverModel", Map.of("robotCode", robotCode));
+    Map<String, Object> deliver = new LinkedHashMap<>();
+    deliver.put("robotCode", robotCode);
+    if (atUserId != null && !atUserId.isBlank()) {
+      String atUserName = valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
+      deliver.put("atUserIds", Map.of(atUserId, atUserName));
+      body.put("cardAtUserIds", List.of(atUserId));
+    }
+    body.put("imGroupOpenDeliverModel", deliver);
     exchange("POST", "/v1.0/card/instances/createAndDeliver", body);
   }
 
+  private void sendLateReminderText(
+      CardPayload payload, String groupId, String robotCode, String atUserId) {
+    String atUserName = valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
+    String richText = valueOrDefault(payload.cardData().get("reminder_markdown"), "@" + atUserName);
+    String plainText = richText.replace(
+        "<a atId=" + atUserId + ">" + atUserName + "</a>", "@" + atUserName);
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("robotCode", robotCode);
+    body.put("openConversationId", groupId);
+    body.put("msgKey", "sampleText");
+    try {
+      body.put("msgParam", JSON.writeValueAsString(Map.of("content", plainText)));
+    } catch (JsonProcessingException error) {
+      throw new CardGatewayException("DINGTALK_MESSAGE_INVALID", false, false);
+    }
+    exchange("POST", "/v1.0/robot/groupMessages/send", body);
+  }
   @Override
   public void update(CardPayload payload) {
     Map<String, Object> body = commonBody(payload);
