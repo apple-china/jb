@@ -1,10 +1,21 @@
+import * as dingTalkSdk from 'dingtalk-jsapi'
+
 export class DingTalkClientError extends Error {
   constructor(public code:string,message:string){super(message)}
 }
 
+type InjectedDingTalkApi = {
+  requestAuthCode:(options:{
+    clientId:string
+    corpId:string
+    success:(result:{code?:string})=>void
+    fail:(error:unknown)=>void
+  })=>void
+}
+
 declare global {
   interface Window {
-    dd?:{requestAuthCode:(options:{clientId:string;corpId:string;success:(result:{code?:string})=>void;fail:(error:unknown)=>void})=>void}
+    dd?:InjectedDingTalkApi
   }
 }
 
@@ -19,18 +30,44 @@ export function missingAuthCodeMessage(corpId=currentDingTalkCorpId(),now=new Da
   return `${part(now.getHours())}:${part(now.getMinutes())}:${part(now.getSeconds())} 未获取到免登码:${corpId}`
 }
 
+async function requestFromInjectedApi(api:InjectedDingTalkApi,clientId:string,corpId:string){
+  return new Promise<string>((resolve,reject)=>api.requestAuthCode({
+    clientId,
+    corpId,
+    success:result=>result.code
+      ? resolve(result.code)
+      : reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')),
+    fail:()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')),
+  }))
+}
+
 export async function requestDingTalkAuthCode(){
-  if(!window.dd?.requestAuthCode)throw new DingTalkClientError('NOT_IN_DINGTALK','请在钉钉内打开后使用免登。')
+  const injectedApi=window.dd?.requestAuthCode?window.dd:undefined
+  if(!injectedApi&&dingTalkSdk.env.platform==='notInDingTalk'){
+    throw new DingTalkClientError('NOT_IN_DINGTALK','请在钉钉内打开后使用免登。')
+  }
+
   const clientId=import.meta.env.VITE_DINGTALK_CLIENT_ID?.trim()
   const configuredCorpId=import.meta.env.VITE_DINGTALK_CORP_ID?.trim()
   const urlCorpId=new URLSearchParams(window.location.search).get('corpid')?.trim()
-  if(!clientId||(!configuredCorpId&&!urlCorpId))throw new DingTalkClientError('DINGTALK_NOT_CONFIGURED','钉钉免登尚未配置，请联系管理员。')
-  if(configuredCorpId&&urlCorpId&&configuredCorpId!==urlCorpId)throw new DingTalkClientError('DINGTALK_CORP_MISMATCH','当前钉钉企业与系统配置不一致。')
+  if(!clientId||(!configuredCorpId&&!urlCorpId)){
+    throw new DingTalkClientError('DINGTALK_NOT_CONFIGURED','钉钉免登尚未配置，请联系管理员。')
+  }
+  if(configuredCorpId&&urlCorpId&&configuredCorpId!==urlCorpId){
+    throw new DingTalkClientError('DINGTALK_CORP_MISMATCH','当前钉钉企业与系统配置不一致。')
+  }
   const corpId=configuredCorpId||urlCorpId!
-  const authCode=await new Promise<string>((resolve,reject)=>window.dd!.requestAuthCode({
-    clientId,corpId,
-    success:result=>result.code?resolve(result.code):reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')),
-    fail:()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')),
-  }))
-  return {authCode,corpId}
+
+  if(injectedApi){
+    return {authCode:await requestFromInjectedApi(injectedApi,clientId,corpId),corpId}
+  }
+
+  try{
+    const result=await dingTalkSdk.requestAuthCode({clientId,corpId})
+    if(!result.code)throw new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')
+    return {authCode:result.code,corpId}
+  }catch(error){
+    if(error instanceof DingTalkClientError)throw error
+    throw new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')
+  }
 }
