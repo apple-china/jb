@@ -42,6 +42,7 @@ async function requestFromInjectedApi(api:InjectedDingTalkApi,clientId:string,co
 }
 
 export async function requestDingTalkAuthCode(){
+  // 自动化验收会注入轻量 window.dd；真实钉钉客户端则由官方 SDK 建立 JSBridge。
   const injectedApi=window.dd?.requestAuthCode?window.dd:undefined
   if(!injectedApi&&dingTalkSdk.env.platform==='notInDingTalk'){
     throw new DingTalkClientError('NOT_IN_DINGTALK','请在钉钉内打开后使用免登。')
@@ -63,6 +64,7 @@ export async function requestDingTalkAuthCode(){
   }
 
   try{
+    // requestAuthCode 无需 dd.config，授权码只能使用一次，取得后立即交给后端换取用户身份。
     const result=await dingTalkSdk.requestAuthCode({clientId,corpId})
     if(!result.code)throw new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')
     return {authCode:result.code,corpId}
