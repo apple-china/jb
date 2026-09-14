@@ -63,13 +63,15 @@ public class CardProjectionService {
               rs.getString("team_name_snapshot"),
               now.isAfter(start.plusMinutes(20)));
         }, date);
+    int appointmentCount = appointments.size();
+    appointments = withEmptyState(appointments);
 
     Map<String, String> publicData = new LinkedHashMap<>();
     publicData.put("data_date", date.format(DATE) + " " + chineseWeekday(date));
     publicData.put("update_time", "更新于" + LocalDateTime.now(clock).format(UPDATE_TIME));
     // 钉钉 cardParamMap 的对象数组必须以 JSON 字符串传递。
     publicData.put("appointment_list", toJson(appointments));
-    publicData.put("summary", String.valueOf(appointments.size()));
+    publicData.put("summary", String.valueOf(appointmentCount));
 
     Map<String, Map<String, String>> privateData = new LinkedHashMap<>();
     boolean pastDate = date.isBefore(LocalDate.now(clock));
@@ -119,6 +121,23 @@ public class CardProjectionService {
         ((Number) card.get("content_version")).longValue());
   }
 
+  static List<Map<String, Object>> withEmptyState(List<Map<String, Object>> appointments) {
+    if (!appointments.isEmpty()) {
+      return appointments;
+    }
+    Map<String, Object> empty = new LinkedHashMap<>();
+    empty.put("time", "");
+    empty.put("streamer", "暂无预约记录");
+    empty.put("status", "");
+    empty.put("makeup_artist", "");
+    empty.put("team", "");
+    empty.put("row_light_color", PAST_LIGHT);
+    empty.put("row_dark_color", PAST_DARK);
+    empty.put("status_color", "gray");
+    empty.put("status_visible", false);
+    empty.put("status_placeholder_visible", true);
+    return List.of(empty);
+  }
   static Map<String, Object> appointmentItem(
       String time,
       String streamer,

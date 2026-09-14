@@ -25,6 +25,17 @@ class CardProjectionServiceTest {
   }
 
   @Test
+  void suppliesAVisiblePlaceholderWhenThereAreNoAppointments() {
+    var items = CardProjectionService.withEmptyState(java.util.List.of());
+
+    assertThat(items).singleElement().satisfies(item -> assertThat(item)
+        .containsEntry("time", "")
+        .containsEntry("streamer", "暂无预约记录")
+        .containsEntry("status_visible", false)
+        .containsEntry("makeup_artist", "")
+        .containsEntry("team", ""));
+  }
+  @Test
   void displaysArrivedStatusAsSignedTag() {
     Map<String, Object> item = CardProjectionService.appointmentItem(
         "08:30", "米粒", "ARRIVED", "小美老师", "晨光二团", false);
