@@ -42,7 +42,7 @@ class DingTalkCardGatewayTest {
 
   @Test
   void createsAndDeliversCardToConfiguredGroup() {
-    server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instance/createAndDeliver"))
+    server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances/createAndDeliver"))
         .andExpect(method(HttpMethod.POST))
         .andExpect(header("x-acs-dingtalk-access-token", "access-token"))
         .andExpect(content().json("""
@@ -93,6 +93,18 @@ class DingTalkCardGatewayTest {
         .isInstanceOfSatisfying(CardGatewayException.class, error -> {
           org.assertj.core.api.Assertions.assertThat(error.code()).isEqualTo("CARD_DELETED");
           org.assertj.core.api.Assertions.assertThat(error.unrecoverable()).isTrue();
+        });
+  }
+
+  @Test
+  void doesNotTreatCreateEndpointNotFoundAsDeletedCardInstance() {
+    server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances/createAndDeliver"))
+        .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+    assertThatThrownBy(() -> gateway.create(payload()))
+        .isInstanceOfSatisfying(CardGatewayException.class, error -> {
+          org.assertj.core.api.Assertions.assertThat(error.code()).isEqualTo("DINGTALK_CARD_REJECTED");
+          org.assertj.core.api.Assertions.assertThat(error.unrecoverable()).isFalse();
         });
   }
 

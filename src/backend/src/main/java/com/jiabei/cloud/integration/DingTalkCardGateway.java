@@ -57,7 +57,7 @@ public class DingTalkCardGateway implements CardGateway {
     body.put("openSpaceId", "dtv1.card//IM_GROUP." + groupId);
     body.put("imGroupOpenSpaceModel", Map.of("supportForward", false));
     body.put("imGroupOpenDeliverModel", Map.of("robotCode", robotCode));
-    exchange("POST", "/v1.0/card/instance/createAndDeliver", body);
+    exchange("POST", "/v1.0/card/instances/createAndDeliver", body);
   }
 
   @Override
@@ -97,7 +97,10 @@ public class DingTalkCardGateway implements CardGateway {
         client.invalidateAccessToken();
         throw new CardGatewayException("TOKEN_EXPIRED", true, false);
       }
-      if (status == 404) throw new CardGatewayException("CARD_DELETED", false, true);
+      // 只有更新现有实例的 404 才表示卡片已删除；创建接口的 404 通常是路径或权限配置错误。
+      if (status == 404 && "PUT".equals(method)) {
+        throw new CardGatewayException("CARD_DELETED", false, true);
+      }
       if (status == 408 || status == 429 || status >= 500) {
         throw new CardGatewayException("DINGTALK_UNAVAILABLE", true, false);
       }

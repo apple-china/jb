@@ -61,4 +61,21 @@ class CardOutboxWorkerTest {
     verify(gateway).update(payload);
     verify(gateway, never()).create(any());
   }
+
+  @Test
+  void stopsReplacingDeletedCardsAfterMaximumAttempts() {
+    when(jdbc.queryForMap("SELECT job_type,business_key,attempt_count,max_attempts FROM integration_job WHERE id=?", jobId))
+        .thenReturn(Map.of("job_type", "CARD_REFRESH", "business_key", "group-1|2026-09-14", "attempt_count", 4, "max_attempts", 5));
+    when(jdbc.queryForObject("SELECT delivered_version FROM daily_card WHERE out_track_id=?", Integer.class, "track-1"))
+        .thenReturn(1);
+    org.mockito.Mockito.doThrow(new com.jiabei.cloud.integration.CardGatewayException("CARD_DELETED", false, true))
+        .when(gateway).update(payload);
+
+    worker.execute(jobId);
+
+    org.assertj.core.api.Assertions.assertThat(org.mockito.Mockito.mockingDetails(jdbc).getInvocations())
+        .noneMatch(invocation -> invocation.getMethod().getName().equals("update")
+            && invocation.getArguments().length > 0
+            && invocation.getArgument(0, String.class).startsWith("UPDATE daily_card SET status='PENDING'"));
+  }
 }
