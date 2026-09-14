@@ -84,11 +84,30 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 前端构建设置 `VITE_ENABLE_MOCK_LOGIN=false`、`VITE_DINGTALK_AUTO_LOGIN=true`；仅验收环境可设置 `VITE_DINGTALK_TEST_DIAGNOSTICS=true`。该环境保留账号密码和钉钉免登，但不显示固定角色快捷登录，也不允许在设置页点击人员切换身份。
 
+服务器首次切换到钉钉测试环境时，从示例复制一份不入库的配置文件，并填写数据库密码、钉钉公开标识、应用密钥及公网来源：
+
+```bash
+cp .env.example .env.dingtalk-test
+# 编辑 .env.dingtalk-test，至少填写 DINGTALK_TEST_DATABASE_PASSWORD、
+# DINGTALK_CORP_ID、DINGTALK_CLIENT_ID、DINGTALK_CLIENT_SECRET、
+# DINGTALK_GROUP_OPEN_CONVERSATION_ID、DINGTALK_CARD_TEMPLATE_ID、APP_ENTRY_URL、
+# VITE_DINGTALK_CORP_ID、VITE_DINGTALK_CLIENT_ID 和 ALLOWED_ORIGINS。
+docker compose --env-file .env.dingtalk-test \
+  -f docker-compose.yml -f docker-compose.dingtalk-test.yml config
+docker compose --env-file .env.dingtalk-test \
+  -f docker-compose.yml -f docker-compose.dingtalk-test.yml \
+  up -d --build --force-recreate
+```
+
+覆盖文件把后端切换为 `dingtalk-test`，并挂载独立的 `jiabei_dingtalk_test` 数据卷；现有开发库卷不会被清除。新测试卷只运行生产迁移并引导一个 `superadmin`。前端镜像会关闭角色快捷登录、自动尝试钉钉免登并开启验收诊断。以后更新仍使用同一组 `--env-file/-f` 参数，避免误回到默认 `local` 环境；密钥文件不得提交。
+
+真实群卡片使用 `DINGTALK_GROUP_OPEN_CONVERSATION_ID` 定位群（群名不能代替会话 ID），使用 `DINGTALK_CARD_TEMPLATE_ID` 指定安排模板；模板须包含 `title`、`date_text`、`schedule_markdown`、`summary`、`entry_url` 公共参数和 `my_appointment` 私有参数。机器人需已加入目标群并具有互动卡片权限。`APP_ENTRY_URL` 必须填写测试站点的 HTTPS 预约页地址。实际网关成功后才记录首次送达，重发会更新同一业务卡片。
+
 - 时区固定 `Asia/Shanghai`；身份、资格、次数、冲突和边界时间均由服务端判定。
 - 会话使用 HttpOnly Cookie，写请求校验 CSRF 与 Origin；停用、解绑和改密会使旧会话失效。
 - 图片仅允许真实 PNG/JPG，最大 2 MB、最大边长 4096，服务端生成随机文件名。
 - `.env.example` 只保留空配置项；密钥不得写入代码、文档或提交记录。
-- 钉钉内免登的前端构建只接收公开标识 `VITE_DINGTALK_CLIENT_ID`、`VITE_DINGTALK_CORP_ID`；Docker Compose 会将其作为构建参数传入。`DINGTALK_CLIENT_SECRET` 只能由后端运行环境注入，绝不能使用 `VITE_` 前缀。
+- 钉钉内免登的前端构建只接收公开标识和功能开关；`VITE_DINGTALK_CLIENT_ID`、`VITE_DINGTALK_CORP_ID` 由 Docker Compose 作为构建参数传入。`DINGTALK_CLIENT_SECRET` 只能由后端运行环境注入，绝不能使用 `VITE_` 前缀。
 - `production` 不暴露本地 Mock 登录/调试接口。当前生产适配器默认禁用，不会误发真实消息。
 - 正式发布前仍须提供并验证钉钉测试企业、目标群/卡片模板、魔点 OrgID/AuthKey/设备号、真实脱敏回调样本和公网 HTTPS 回调地址。
 
