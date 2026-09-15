@@ -53,11 +53,44 @@ class AttendanceServiceTest {
     AttendanceService service = new AttendanceService(
         jdbc, new BookingPolicy(properties), properties, Clock.system(ZONE), new ObjectMapper());
 
-    ReflectionTestUtils.invokeMethod(service, "refreshScheduleCard", LocalDate.of(2026, 9, 15));
+    new CardRefreshService(jdbc, properties, Clock.system(ZONE)).refreshExisting(LocalDate.of(2026, 9, 15));
 
     verify(jdbc).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO integration_job"),
         any(UUID.class), eq("group|2026-09-15"), eq("2026-09-15"), eq("group"), eq(5));
   }
+  @Test
+  void refreshesCardsWhenAnAppointmentCrossesTheTwentyMinuteBoundary() {
+    SchedulerJdbcTemplate jdbc = new SchedulerJdbcTemplate();
+    CardRefreshService cards = mock(CardRefreshService.class);
+    BookingProperties properties = new BookingProperties(
+        ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
+    Clock clock = Clock.fixed(java.time.Instant.parse("2026-09-15T01:00:00Z"), ZONE);
+    AttendanceService service = new AttendanceService(
+        jdbc, new BookingPolicy(properties), properties, clock, new ObjectMapper(), cards);
+
+    service.refreshActive();
+
+    assertThat(jdbc.pastRefreshSql).contains("card_past_refreshed_at IS NULL")
+        .contains("start_at + interval '20 minutes' <= ?");
+    assertThat(jdbc.pastRefreshArguments[0]).isEqualTo(LocalDate.of(2026, 9, 14));
+    assertThat(jdbc.pastRefreshArguments[1]).isEqualTo(LocalDate.of(2026, 9, 16));
+    verify(cards).refreshExistingWindow();
+  }
+
+  private static final class SchedulerJdbcTemplate extends JdbcTemplate {
+    private String pastRefreshSql;
+    private Object[] pastRefreshArguments;
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+      if (sql.startsWith("SELECT id")) return List.of();
+      pastRefreshSql = sql;
+      pastRefreshArguments = args;
+      return (List<T>) List.of(LocalDate.of(2026, 9, 15));
+    }
+  }
+
   private static final class CapturingJdbcTemplate extends JdbcTemplate {
     private Object[] arguments;
 

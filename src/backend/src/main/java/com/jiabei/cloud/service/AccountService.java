@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,9 +28,13 @@ public class AccountService {
   private final PasswordService passwords;
   private final ObjectMapper json;
   private final DingTalkDirectoryGateway directory;
+  private final CardRefreshService cards;
 
-  public AccountService(JdbcTemplate jdbc,PasswordService passwords,ObjectMapper json,DingTalkDirectoryGateway directory){
-    this.jdbc=jdbc;this.passwords=passwords;this.json=json;this.directory=directory;
+  public AccountService(JdbcTemplate jdbc,PasswordService passwords,ObjectMapper json,DingTalkDirectoryGateway directory){this(jdbc,passwords,json,directory,null);}
+
+  @Autowired
+  public AccountService(JdbcTemplate jdbc,PasswordService passwords,ObjectMapper json,DingTalkDirectoryGateway directory,CardRefreshService cards){
+    this.jdbc=jdbc;this.passwords=passwords;this.json=json;this.directory=directory;this.cards=cards;
   }
 
   public List<Map<String,Object>> list(CurrentUser actor){
@@ -116,6 +121,7 @@ public class AccountService {
             version=version+1,updated_at=now() WHERE id=?
           """,nickname,role.name(),makeupArtistId,active,attending,modify,cancel,create,active,role.name(),id);
     }catch(DataIntegrityViolationException e){throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_CONFLICT","角色、昵称或化妆师关联冲突。");}
+    if(!nickname.equals(before.get("nickname"))){int changed=jdbc.update("UPDATE appointment SET streamer_name_snapshot=?,updated_at=now() WHERE streamer_user_id=? AND streamer_name_snapshot<>?",nickname,id,nickname);if(makeupArtistId!=null)changed+=jdbc.update("UPDATE appointment SET makeup_artist_name_snapshot=?,updated_at=now() WHERE makeup_artist_id=? AND makeup_artist_name_snapshot<>?",nickname,makeupArtistId,nickname);if(changed>0&&cards!=null)cards.refreshExistingWindow();}
     audit(id,"UPDATE",actor,Map.of("nickname",nickname,"role",role.name(),"active",active,"attending",attending,"canCreateAppointments",create),trace);
     return byId(actor,id);
   }

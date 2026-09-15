@@ -2,6 +2,7 @@ package com.jiabei.cloud.integration;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jiabei.cloud.service.CardRefreshService;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,16 +23,22 @@ public class DingTalkEmployeeSyncService implements ApplicationRunner {
   private final JdbcTemplate jdbc;
   private final DingTalkRemoteDirectory remote;
   private final ObjectMapper json;
+  private final CardRefreshService cards;
 
   @Autowired
-  public DingTalkEmployeeSyncService(JdbcTemplate jdbc, DingTalkRemoteDirectory remote) {
-    this(jdbc, remote, new ObjectMapper());
+  public DingTalkEmployeeSyncService(JdbcTemplate jdbc, DingTalkRemoteDirectory remote, CardRefreshService cards) {
+    this(jdbc, remote, new ObjectMapper(), cards);
   }
 
-  DingTalkEmployeeSyncService(JdbcTemplate jdbc, DingTalkRemoteDirectory remote, ObjectMapper json) {
+  DingTalkEmployeeSyncService(JdbcTemplate jdbc, DingTalkRemoteDirectory remote) {
+    this(jdbc, remote, new ObjectMapper(), null);
+  }
+
+  DingTalkEmployeeSyncService(JdbcTemplate jdbc, DingTalkRemoteDirectory remote, ObjectMapper json, CardRefreshService cards) {
     this.jdbc = jdbc;
     this.remote = remote;
     this.json = json;
+    this.cards = cards;
   }
 
   @Override public void run(ApplicationArguments args) { safeSynchronize(); }
@@ -62,6 +69,19 @@ public class DingTalkEmployeeSyncService implements ApplicationRunner {
             department_ids=excluded.department_ids,is_active=true,deleted_at=NULL,last_synced_at=now(),updated_at=now()
           """, employee.userId(), employee.name(), employee.unionId(), departments(employee.departmentIds()));
     }
+    int renamed = jdbc.update("""
+        UPDATE appointment a SET streamer_name_snapshot=e.name,updated_at=now()
+        FROM app_user u JOIN dingtalk_employee e ON e.user_id=u.dingtalk_user_id
+        WHERE a.streamer_user_id=u.id AND u.role='STREAMER' AND e.is_active
+          AND a.streamer_name_snapshot<>e.name
+        """);
+    jdbc.update("""
+        UPDATE app_user u SET nickname=e.name,version=version+1,updated_at=now()
+        FROM dingtalk_employee e
+        WHERE u.dingtalk_user_id=e.user_id AND u.role='STREAMER' AND e.is_active
+          AND u.nickname<>e.name
+        """);
+    if (renamed > 0 && cards != null) cards.refreshExistingWindow();
     jdbc.update("""
         UPDATE app_user u SET is_active=false,credential_version=credential_version+1,version=version+1,updated_at=now()
         FROM dingtalk_employee e

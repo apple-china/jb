@@ -77,7 +77,7 @@ public class CardProjectionService {
               rs.getString("attendance_status"),
               rs.getString("makeup_artist_name_snapshot"),
               rs.getString("team_name_snapshot"),
-              now.isAfter(start.plusMinutes(20)));
+              !now.isBefore(start.plusMinutes(20)));
         }, date);
     int appointmentCount = appointments.size();
     appointments = withEmptyState(appointments);
@@ -168,7 +168,7 @@ public class CardProjectionService {
       default -> "";
     };
     boolean statusVisible = !status.isEmpty();
-    String statusColor = past ? "gray" : switch (attendanceStatus) {
+    String statusColor = switch (attendanceStatus) {
       case "ARRIVED" -> "green";
       case "NOT_ARRIVED" -> "red";
       case "LATE" -> "orange";

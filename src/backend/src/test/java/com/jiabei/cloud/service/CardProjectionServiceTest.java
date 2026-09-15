@@ -61,7 +61,7 @@ class CardProjectionServiceTest {
         .containsEntry("team", "星光直播..")
         .containsEntry("row_light_color", "#A6AAB3")
         .containsEntry("row_dark_color", "#7C818B")
-        .containsEntry("status_color", "gray");
+        .containsEntry("status_color", "blue");
   }
 
   @Test
@@ -99,6 +99,18 @@ class CardProjectionServiceTest {
         new java.util.UUID(0, 1), "玲玲", "user-1", recent, recent);
     assertThat(twoEmojis.emojiCount()).isEqualTo(2);
   }
+  @Test
+  void keepsSemanticStatusColorWhenPast() {
+    Map<String, Object> item = CardProjectionService.appointmentItem(
+        "08:30", "米粒", "LATE", "小美老师", "晨光二团", true);
+
+    assertThat(item)
+        .containsEntry("row_light_color", "#A6AAB3")
+        .containsEntry("row_dark_color", "#7C818B")
+        .containsEntry("status", "迟到")
+        .containsEntry("status_color", "orange");
+  }
+
   @Test
   void displaysArrivedStatusAsSignedTag() {
     Map<String, Object> item = CardProjectionService.appointmentItem(
