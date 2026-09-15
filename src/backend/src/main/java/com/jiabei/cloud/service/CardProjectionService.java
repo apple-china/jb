@@ -276,12 +276,22 @@ public class CardProjectionService {
         """, appointmentId);
     String dingTalkUserId = (String) row.get("dingtalk_user_id");
     String streamerName = (String) row.get("streamer_name_snapshot");
+    LocalDate businessDate = toLocalDate(row.get("booking_date"));
     Map<String, String> data = new LinkedHashMap<>();
-    data.put("title", "化妆签到提醒");
     String savedMessage = (String) row.get("message_text");
-    data.put("reminder_markdown", savedMessage == null || savedMessage.isBlank()
+    String message = savedMessage == null || savedMessage.isBlank()
         ? lateReminderText(appointmentId, streamerName, dingTalkUserId)
-        : savedMessage);
+        : savedMessage;
+    String visibleMessage = message.replace(
+        "<a atId=" + dingTalkUserId + ">" + streamerName + "</a>", "@" + streamerName);
+    int comma = visibleMessage.indexOf('，');
+    String title = comma >= 0
+        ? visibleMessage.substring(("@" + streamerName).length(), comma).trim()
+        : "";
+    data.put("header_title", "预约提醒");
+    data.put("appointment_time", (String) row.get("start_time"));
+    data.put("mention_text", title.isEmpty() ? "@" + streamerName + "，" : "@" + streamerName + "  " + title + "，");
+    data.put("reminder_text", comma >= 0 ? visibleMessage.substring(comma + 1) : visibleMessage);
     data.put("appointment_text",
         row.get("makeup_artist_name_snapshot") + " · " + row.get("team_name_snapshot"));
     data.put("at_user_id", dingTalkUserId);
@@ -291,9 +301,15 @@ public class CardProjectionService {
         (String) row.get("out_track_id"),
         props.groupId(),
         props.lateCardTemplateId(),
-        (LocalDate) row.get("booking_date"),
+        businessDate,
         data,
         Map.of(),
         1);
+  }
+
+  private static LocalDate toLocalDate(Object value) {
+    if (value instanceof LocalDate date) return date;
+    if (value instanceof java.sql.Date date) return date.toLocalDate();
+    throw new IllegalArgumentException("Unsupported booking date type: " + value);
   }
 }

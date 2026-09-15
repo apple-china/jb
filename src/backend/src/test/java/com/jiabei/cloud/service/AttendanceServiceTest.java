@@ -1,6 +1,12 @@
 package com.jiabei.cloud.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jiabei.cloud.config.BookingProperties;
@@ -38,6 +44,20 @@ class AttendanceServiceTest {
     assertThat(jdbc.arguments[2]).isEqualTo(start.plusMinutes(10).toOffsetDateTime());
   }
 
+  @Test
+  void queuesExistingScheduleCardAfterAttendanceChanges() {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    when(jdbc.update(anyString(), eq(LocalDate.of(2026, 9, 15)), eq("group"))).thenReturn(1);
+    BookingProperties properties = new BookingProperties(
+        ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
+    AttendanceService service = new AttendanceService(
+        jdbc, new BookingPolicy(properties), properties, Clock.system(ZONE), new ObjectMapper());
+
+    ReflectionTestUtils.invokeMethod(service, "refreshScheduleCard", LocalDate.of(2026, 9, 15));
+
+    verify(jdbc).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO integration_job"),
+        any(UUID.class), eq("group|2026-09-15"), eq("2026-09-15"), eq("group"), eq(5));
+  }
   private static final class CapturingJdbcTemplate extends JdbcTemplate {
     private Object[] arguments;
 
