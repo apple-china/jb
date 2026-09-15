@@ -38,7 +38,7 @@ public class AttendanceService {
     List<UUID> appointments=jdbc.query("SELECT a.id FROM appointment a JOIN app_user u ON u.id=a.streamer_user_id WHERE a.status='ACTIVE' AND NOT a.attendance_frozen AND u.dingtalk_user_id=? AND a.booking_date BETWEEN ? AND ?",(rs,n)->rs.getObject(1,UUID.class),dingTalkUserId,occurredAt.toLocalDate().minusDays(1),occurredAt.toLocalDate().plusDays(1));appointments.forEach(id->recalculate(id,trace));return true;
   }
 
-  @Scheduled(fixedDelayString="${jiabei.booking.attendance-poll-ms:60000}")
+  @Scheduled(fixedDelayString="${jiabei.booking.attendance-poll-ms:10000}")
   @Transactional public void refreshActive(){LocalDate today=LocalDate.now(clock);List<UUID> ids=jdbc.query("SELECT id FROM appointment WHERE status='ACTIVE' AND NOT attendance_frozen AND booking_date BETWEEN ? AND ?",(rs,n)->rs.getObject(1,UUID.class),today,today.plusDays(1));ids.forEach(id->recalculate(id,"attendance-scheduler"));}
 
   private Evidence firstEvidence(Row row){if(row.dingTalkUserId()==null)return null;List<Evidence> events=jdbc.query("SELECT id,occurred_at FROM gate_event WHERE dingtalk_user_id=? AND occurred_at>? AND occurred_at<? AND occurred_at<=? ORDER BY occurred_at,id LIMIT 1",(rs,n)->new Evidence(rs.getObject(1,UUID.class),rs.getObject(2,OffsetDateTime.class).atZoneSameInstant(props.zoneId())),row.dingTalkUserId(),row.start().minusMinutes(props.attendanceWindowMinutes()).toOffsetDateTime(),row.start().plusMinutes(props.lateGraceMinutes()).toOffsetDateTime(),ZonedDateTime.now(clock).toOffsetDateTime());return events.isEmpty()?null:events.getFirst();}

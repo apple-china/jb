@@ -78,4 +78,20 @@ class CardOutboxWorkerTest {
             && invocation.getArguments().length > 0
             && invocation.getArgument(0, String.class).startsWith("UPDATE daily_card SET status='PENDING'"));
   }
+
+  @Test
+  void retriesUnexpectedProjectionFailureInsteadOfDiscardingTheNotification() {
+    when(jdbc.queryForObject("SELECT delivered_version FROM daily_card WHERE out_track_id=?", Integer.class, "track-1"))
+        .thenReturn(0);
+    when(projection.projectSchedule(LocalDate.of(2026, 9, 14), "group-1"))
+        .thenThrow(new IllegalStateException("temporary database conversion problem"));
+
+    worker.execute(jobId);
+
+    org.assertj.core.api.Assertions.assertThat(org.mockito.Mockito.mockingDetails(jdbc).getInvocations())
+        .anyMatch(invocation -> invocation.getMethod().getName().equals("update")
+            && invocation.getArguments().length > 1
+            && invocation.getArgument(0, String.class).startsWith("UPDATE integration_job SET status=")
+            && "RETRY_WAIT".equals(invocation.getArgument(1)));
+  }
 }
