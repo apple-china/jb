@@ -58,12 +58,44 @@ class AttendanceServiceTest {
     verify(jdbc).update(org.mockito.ArgumentMatchers.startsWith("INSERT INTO integration_job"),
         any(UUID.class), eq("group|2026-09-15"), eq("2026-09-15"), eq("group"), eq(5));
   }
+
+  @Test
+  void duplicateGateEventIsAcknowledgedWithoutRecalculatingAppointments() {
+    DuplicateJdbcTemplate jdbc = new DuplicateJdbcTemplate();
+    BookingProperties properties = new BookingProperties(
+        ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
+    AttendanceService service = new AttendanceService(
+        jdbc, new BookingPolicy(properties), properties, Clock.system(ZONE), new ObjectMapper());
+
+    boolean inserted = service.ingest(
+        "event-1", "org", "device", "ding-user-1",
+        ZonedDateTime.of(2026, 9, 15, 8, 20, 0, 0, ZONE), "{}", "trace");
+
+    assertThat(inserted).isFalse();
+    assertThat(jdbc.queried).isFalse();
+  }
+
   private static final class CapturingJdbcTemplate extends JdbcTemplate {
     private Object[] arguments;
 
     @Override
     public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
       arguments = args;
+      return List.of();
+    }
+  }
+
+  private static final class DuplicateJdbcTemplate extends JdbcTemplate {
+    private boolean queried;
+
+    @Override
+    public int update(String sql, Object... args) {
+      return 0;
+    }
+
+    @Override
+    public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+      queried = true;
       return List.of();
     }
   }
