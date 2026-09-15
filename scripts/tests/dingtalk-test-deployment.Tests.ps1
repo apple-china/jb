@@ -5,6 +5,18 @@ function Assert-Contains([string]$Content, [string]$Expected, [string]$Message) 
   if (-not $Content.Contains($Expected)) { throw $Message }
 }
 
+function Assert-UniqueMigrationVersions([string[]]$Directories, [string]$Message) {
+  $versions = foreach ($directory in $Directories) {
+    Get-ChildItem -LiteralPath $directory -Filter 'V*__*.sql' | ForEach-Object {
+      if ($_.BaseName -match '^V([^_]+)__') { $Matches[1] }
+    }
+  }
+  $duplicates = $versions | Group-Object | Where-Object Count -gt 1
+  if ($duplicates) {
+    throw "$Message Duplicate versions: $($duplicates.Name -join ', ')."
+  }
+}
+
 $dockerfile = Get-Content -LiteralPath (Join-Path $root 'src\frontend\Dockerfile') -Raw
 $baseCompose = Get-Content -LiteralPath (Join-Path $root 'docker-compose.yml') -Raw
 $envExample = Get-Content -LiteralPath (Join-Path $root '.env.example') -Raw
@@ -30,5 +42,13 @@ Assert-Contains $testCompose 'VITE_DINGTALK_TEST_DIAGNOSTICS: "true"' 'Test fron
 Assert-Contains $testCompose 'DINGTALK_GROUP_OPEN_CONVERSATION_ID: ${DINGTALK_GROUP_OPEN_CONVERSATION_ID:?' 'Test backend must require the target group ID.'
 Assert-Contains $testCompose 'DINGTALK_CARD_TEMPLATE_ID: ${DINGTALK_CARD_TEMPLATE_ID:?' 'Test backend must require the card template ID.'
 Assert-Contains $testCompose 'APP_ENTRY_URL: ${APP_ENTRY_URL:?' 'Test backend must require the public card entry URL.'
+Assert-UniqueMigrationVersions @(
+  (Join-Path $root 'src\backend\src\main\resources\db\migration'),
+  (Join-Path $root 'src\backend\src\main\resources\db\dingtalk-test')
+) 'DingTalk test Flyway locations must use unique migration versions.'
+Assert-UniqueMigrationVersions @(
+  (Join-Path $root 'src\backend\src\main\resources\db\migration'),
+  (Join-Path $root 'src\backend\src\main\resources\db\local')
+) 'Local Flyway locations must use unique migration versions.'
 
-Write-Host 'PASS DingTalk test deployment contract (14 cases)'
+Write-Host 'PASS DingTalk test deployment contract (16 cases)'
