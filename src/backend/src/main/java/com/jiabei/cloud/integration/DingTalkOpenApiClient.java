@@ -79,7 +79,7 @@ public class DingTalkOpenApiClient implements DingTalkIdentityGateway, DingTalkR
   }
 
   private JsonNode legacyPost(String path, Object body) {
-    String url = OAPI + path + "?access_token=" + URLEncoder.encode(token(), StandardCharsets.UTF_8);
+    String url = OAPI + path + "?access_token=" + URLEncoder.encode(accessToken(), StandardCharsets.UTF_8);
     try {
       JsonNode response = http.post().uri(url).body(body).retrieve().body(JsonNode.class);
       if (response == null || response.path("errcode").asInt(-1) != 0) {
@@ -93,7 +93,7 @@ public class DingTalkOpenApiClient implements DingTalkIdentityGateway, DingTalkR
     }
   }
 
-  private synchronized String token() {
+  synchronized String accessToken() {
     if (accessToken != null && Instant.now().isBefore(tokenExpiresAt)) return accessToken;
     properties.requireCredentials();
     try {
@@ -110,6 +110,11 @@ public class DingTalkOpenApiClient implements DingTalkIdentityGateway, DingTalkR
     } catch (Exception error) {
       throw unavailable("钉钉服务暂时不可用。");
     }
+  }
+
+  synchronized void invalidateAccessToken() {
+    accessToken = null;
+    tokenExpiresAt = Instant.EPOCH;
   }
 
   private static String text(JsonNode node, String field) { return node.path(field).asText("").trim(); }

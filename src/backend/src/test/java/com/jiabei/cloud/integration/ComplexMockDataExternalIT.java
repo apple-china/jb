@@ -122,7 +122,7 @@ class ComplexMockDataExternalIT {
     assertThat(count("SELECT count(*) FROM daily_card WHERE first_delivered_at IS NULL")).isPositive();
     assertThat(count("SELECT count(*) FROM daily_card WHERE first_delivered_at IS NOT NULL")).isPositive();
     assertThat(count("SELECT count(*) FROM daily_card WHERE group_open_conversation_id='mock-group-001'")).isEqualTo(2);
-    assertThat(count("SELECT count(*) FROM mock_card_delivery WHERE card_data ?& ARRAY['title','date_text','schedule_markdown','summary','entry_url'] AND private_data ? 'streamer01'")).isPositive();
+    assertThat(count("SELECT count(*) FROM mock_card_delivery WHERE card_data ?& ARRAY['data_date','update_time','appointment_list','summary'] AND private_data ? 'streamer01'")).isPositive();
     assertThat(count("SELECT count(*) FROM integration_job j WHERE j.job_type='CARD_REFRESH' AND NOT EXISTS (SELECT 1 FROM daily_card c WHERE j.business_key=c.group_open_conversation_id || '|' || c.business_date)")).isZero();
     assertThat(count("SELECT count(*) FROM mock_card_call_log WHERE result_code='OK'")).isPositive();
     assertThat(count("SELECT count(*) FROM mock_card_call_log WHERE result_code<>'OK'")).isPositive();

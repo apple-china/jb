@@ -1,0 +1,48 @@
+services:
+  # Dedicated volumes keep local development data intact when this override is active.
+  db:
+    environment:
+      POSTGRES_DB: jiabei_dingtalk_test
+      POSTGRES_USER: ${DINGTALK_TEST_DATABASE_USER:-jiabei}
+      POSTGRES_PASSWORD: ${DINGTALK_TEST_DATABASE_PASSWORD:?DINGTALK_TEST_DATABASE_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DINGTALK_TEST_DATABASE_USER:-jiabei} -d jiabei_dingtalk_test"]
+    volumes:
+      - jiabei_dingtalk_test_pgdata:/var/lib/postgresql/data
+
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: dingtalk-test
+      DINGTALK_TEST_DATABASE_URL: jdbc:postgresql://db:5432/jiabei_dingtalk_test
+      DINGTALK_TEST_DATABASE_USER: ${DINGTALK_TEST_DATABASE_USER:-jiabei}
+      DINGTALK_TEST_DATABASE_PASSWORD: ${DINGTALK_TEST_DATABASE_PASSWORD:?DINGTALK_TEST_DATABASE_PASSWORD is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      DINGTALK_CORP_ID: ${DINGTALK_CORP_ID:?DINGTALK_CORP_ID is required}
+      DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:?DINGTALK_CLIENT_ID is required}
+      DINGTALK_CLIENT_SECRET: ${DINGTALK_CLIENT_SECRET:?DINGTALK_CLIENT_SECRET is required}
+      DINGTALK_APP_ID: ${DINGTALK_APP_ID:-}
+      DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID:-}
+      DINGTALK_SYNC_INTERVAL_MS: ${DINGTALK_SYNC_INTERVAL_MS:-300000}
+      DINGTALK_GROUP_OPEN_CONVERSATION_ID: ${DINGTALK_GROUP_OPEN_CONVERSATION_ID:?DINGTALK_GROUP_OPEN_CONVERSATION_ID is required}
+      DINGTALK_CARD_TEMPLATE_ID: ${DINGTALK_CARD_TEMPLATE_ID:?DINGTALK_CARD_TEMPLATE_ID is required}
+      DINGTALK_LATE_CARD_TEMPLATE_ID: ${DINGTALK_LATE_CARD_TEMPLATE_ID:-}
+      APP_ENTRY_URL: ${APP_ENTRY_URL:?APP_ENTRY_URL is required}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-superadmin}
+      SUPER_ADMIN_INITIAL_PASSWORD: ${SUPER_ADMIN_INITIAL_PASSWORD:-superadmin}
+      SUPER_ADMIN_DINGTALK_USER_ID: ${SUPER_ADMIN_DINGTALK_USER_ID:-}
+      SUPER_ADMIN_NICKNAME: ${SUPER_ADMIN_NICKNAME:-Admin}
+    volumes:
+      - jiabei_dingtalk_test_uploads:/app/uploads
+
+  frontend:
+    build:
+      args:
+        VITE_DINGTALK_CLIENT_ID: ${VITE_DINGTALK_CLIENT_ID:?VITE_DINGTALK_CLIENT_ID is required}
+        VITE_DINGTALK_CORP_ID: ${VITE_DINGTALK_CORP_ID:?VITE_DINGTALK_CORP_ID is required}
+        VITE_ENABLE_MOCK_LOGIN: "false"
+        VITE_DINGTALK_AUTO_LOGIN: "true"
+        VITE_DINGTALK_TEST_DIAGNOSTICS: "true"
+
+volumes:
+  jiabei_dingtalk_test_pgdata:
+  jiabei_dingtalk_test_uploads:

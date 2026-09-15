@@ -1,6 +1,4 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
 
@@ -28,9 +26,6 @@ async function expectIPhonePage(page: Page, errors: string[]) {
 
 async function attachScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshot = await page.screenshot({ fullPage: true })
-  const evidenceDir = resolve(process.cwd(), '../../docs/qa/iphone15')
-  await mkdir(evidenceDir, { recursive: true })
-  await writeFile(resolve(evidenceDir, `${name}.png`), screenshot)
   await testInfo.attach(name, { body: screenshot, contentType: 'image/png' })
 }
 
