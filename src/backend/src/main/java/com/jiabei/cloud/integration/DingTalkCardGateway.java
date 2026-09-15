@@ -77,6 +77,10 @@ public class DingTalkCardGateway implements CardGateway {
       String atUserName = valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
       deliver.put("atUserIds", Map.of(atUserId, atUserName));
       body.put("cardAtUserIds", List.of(atUserId));
+      String alertContent = valueOrDefault(payload.cardData().get("reminder_markdown"),
+          "@" + atUserName);
+      groupSpace.put("notification", Map.of(
+          "notificationOff", false, "alertContent", visibleMention(alertContent, atUserId, atUserName)));
     }
     body.put("imGroupOpenDeliverModel", deliver);
     exchange("POST", "/v1.0/card/instances/createAndDeliver", body);
@@ -86,8 +90,7 @@ public class DingTalkCardGateway implements CardGateway {
       CardPayload payload, String groupId, String robotCode, String atUserId) {
     String atUserName = valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
     String richText = valueOrDefault(payload.cardData().get("reminder_markdown"), "@" + atUserName);
-    String plainText = richText.replace(
-        "<a atId=" + atUserId + ">" + atUserName + "</a>", "@" + atUserName);
+    String plainText = visibleMention(richText, atUserId, atUserName);
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("robotCode", robotCode);
     body.put("openConversationId", groupId);
@@ -163,6 +166,10 @@ public class DingTalkCardGateway implements CardGateway {
       case SATURDAY -> "六";
       case SUNDAY -> "日";
     };
+  }
+  private static String visibleMention(String text, String atUserId, String atUserName) {
+    return text.replace(
+        "<a atId=" + atUserId + ">" + atUserName + "</a>", "@" + atUserName);
   }
   private static String valueOrDefault(String value, String fallback) {
     return value == null || value.isBlank() ? fallback : value;

@@ -94,4 +94,20 @@ class CardOutboxWorkerTest {
             && invocation.getArgument(0, String.class).startsWith("UPDATE integration_job SET status=")
             && "RETRY_WAIT".equals(invocation.getArgument(1)));
   }
+
+  @Test
+  void skipsHistoricalLateReminderInsteadOfSendingIt() {
+    UUID appointmentId = UUID.randomUUID();
+    when(jdbc.queryForMap("SELECT job_type,business_key,attempt_count,max_attempts FROM integration_job WHERE id=?", jobId))
+        .thenReturn(Map.of("job_type", "LATE_REMINDER", "business_key", appointmentId.toString(),
+            "attempt_count", 0, "max_attempts", 5));
+    when(jdbc.queryForObject(
+        "SELECT count(*) FROM appointment WHERE id=? AND booking_date=current_date AND status='ACTIVE' AND attendance_status='LATE' AND attendance_event_id IS NULL",
+        Integer.class, appointmentId)).thenReturn(0);
+
+    worker.execute(jobId);
+
+    verify(projection, never()).projectLate(any());
+    verify(gateway, never()).create(any());
+  }
 }

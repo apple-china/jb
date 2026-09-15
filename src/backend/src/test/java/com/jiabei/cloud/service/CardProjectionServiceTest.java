@@ -38,7 +38,9 @@ class CardProjectionServiceTest {
     assertThat(payload.businessDate()).isEqualTo(LocalDate.of(2026, 9, 15));
     assertThat(payload.cardData()).containsExactlyInAnyOrderEntriesOf(Map.of(
         "header_title", "预约提醒", "appointment_time", "08:30",
-        "mention_text", "@玲玲  姐姐，", "reminder_text", "化妆老师在等你呢～ ✨",
+        "mention_text", "@玲玲", "greeting_text", "姐姐，",
+        "reminder_text", "化妆老师在等你呢～ ✨",
+        "reminder_markdown", "<a atId=user-1>玲玲</a> 姐姐，化妆老师在等你呢～ ✨",
         "appointment_text", "小贝老师 · 星河一团", "at_user_id", "user-1",
         "at_user_name", "玲玲", "entry_url", "https://example.test"));
   }

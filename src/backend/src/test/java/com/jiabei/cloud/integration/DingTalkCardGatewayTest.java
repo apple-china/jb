@@ -73,6 +73,12 @@ class DingTalkCardGatewayTest {
         .andExpect(content().json("""
             {
               "cardAtUserIds":["streamer-1"],
+              "imGroupOpenSpaceModel":{
+                "notification":{
+                  "notificationOff":false,
+                  "alertContent":"@玲玲 姐姐，请尽快签到 ✨"
+                }
+              },
               "imGroupOpenDeliverModel":{
                 "robotCode":"robot-code",
                 "atUserIds":{"streamer-1":"玲玲"}
