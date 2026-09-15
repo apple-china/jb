@@ -31,3 +31,6 @@ WHERE j.job_type = 'LATE_REMINDER'
     FROM appointment a
     WHERE a.id::text = j.business_key
       AND a.status = 'ACTIVE'
+      AND a.attendance_status = 'LATE'
+      AND a.attendance_event_id IS NULL
+  );
