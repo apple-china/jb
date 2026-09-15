@@ -36,7 +36,9 @@ class CardProjectionServiceTest {
     var payload = service.projectLate(appointmentId);
 
     assertThat(payload.businessDate()).isEqualTo(LocalDate.of(2026, 9, 15));
-    assertThat(payload.cardData()).containsExactlyInAnyOrderEntriesOf(Map.of(
+    assertThat(payload.cardData()).hasSize(11)
+        .containsEntry("reminder_greeting", "<a atId=user-1>玲玲</a> 姐姐，")
+        .containsAllEntriesOf(Map.of(
         "header_title", "预约提醒", "appointment_time", "08:30",
         "mention_text", "@玲玲", "greeting_text", "姐姐，",
         "reminder_text", "化妆老师在等你呢～ ✨",

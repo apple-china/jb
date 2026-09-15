@@ -292,6 +292,8 @@ public class CardProjectionService {
     data.put("appointment_time", (String) row.get("start_time"));
     data.put("mention_text", "@" + streamerName);
     data.put("greeting_text", title.isEmpty() ? "，" : title + "，");
+    data.put("reminder_greeting", "<a atId=" + dingTalkUserId + ">" + streamerName
+        + "</a> " + (title.isEmpty() ? "，" : title + "，"));
     data.put("reminder_text", comma >= 0 ? visibleMessage.substring(comma + 1) : visibleMessage);
     data.put("reminder_markdown", message);
     data.put("appointment_text",
