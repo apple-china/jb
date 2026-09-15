@@ -36,7 +36,7 @@ class AttendanceServiceTest {
     ZonedDateTime start = ZonedDateTime.of(2026, 9, 15, 8, 30, 0, 0, ZONE);
     AttendanceService.Row appointment = new AttendanceService.Row(
         UUID.randomUUID(), start, LocalDate.of(2026, 9, 15), "ACTIVE", "PENDING", false,
-        null, "ding-user-1", "玲玲");
+        null, null, "ding-user-1", "玲玲");
 
     ReflectionTestUtils.invokeMethod(service, "firstEvidence", appointment);
 
@@ -73,6 +73,27 @@ class AttendanceServiceTest {
 
     assertThat(inserted).isFalse();
     assertThat(jdbc.queried).isFalse();
+  }
+
+  @Test
+  void retainedEvidenceTimeSurvivesGateEventCleanup() {
+    CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
+    BookingProperties properties = new BookingProperties(
+        ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
+    AttendanceService service = new AttendanceService(
+        jdbc, new BookingPolicy(properties), properties, Clock.system(ZONE), new ObjectMapper());
+    ZonedDateTime start = ZonedDateTime.of(2026, 9, 15, 8, 30, 0, 0, ZONE);
+    ZonedDateTime evidenceAt = start.minusMinutes(15);
+    AttendanceService.Row appointment = new AttendanceService.Row(
+        UUID.randomUUID(), start, LocalDate.of(2026, 9, 15), "ACTIVE", "ARRIVED", false,
+        null, evidenceAt, "ding-user-1", "玲玲");
+
+    AttendanceService.Evidence evidence =
+        ReflectionTestUtils.invokeMethod(service, "firstEvidence", appointment);
+
+    assertThat(evidence).isNotNull();
+    assertThat(evidence.at()).isEqualTo(evidenceAt);
+    assertThat(jdbc.arguments).isNull();
   }
 
   private static final class CapturingJdbcTemplate extends JdbcTemplate {

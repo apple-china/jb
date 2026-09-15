@@ -62,3 +62,7 @@ jiabei:
     org-auth-key: ${MOREDIAN_ORG_AUTH_KEY:}
     device-sn: ${MOREDIAN_DEVICE_SN:mock-device}
     require-signature: ${MOREDIAN_REQUIRE_SIGNATURE:false}
+    retention-days: ${MOREDIAN_RETENTION_DAYS:180}
+    max-events: ${MOREDIAN_MAX_EVENTS:60000}
+    cleanup-initial-delay-ms: ${MOREDIAN_CLEANUP_INITIAL_DELAY_MS:300000}
+    cleanup-interval-ms: ${MOREDIAN_CLEANUP_INTERVAL_MS:604800000}

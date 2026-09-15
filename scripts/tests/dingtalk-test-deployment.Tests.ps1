@@ -46,6 +46,11 @@ Assert-Contains $testCompose 'MOREDIAN_ORG_ID: ${MOREDIAN_ORG_ID:?' 'Test backen
 Assert-Contains $testCompose 'MOREDIAN_ORG_AUTH_KEY: ${MOREDIAN_ORG_AUTH_KEY:?' 'Test backend must require the Moredian organization auth key.'
 Assert-Contains $testCompose 'MOREDIAN_DEVICE_SN: ${MOREDIAN_DEVICE_SN:?' 'Test backend must require the Moredian device SN.'
 Assert-Contains $testCompose 'MOREDIAN_REQUIRE_SIGNATURE: ${MOREDIAN_REQUIRE_SIGNATURE:-true}' 'Test backend must verify Moredian callbacks by default.'
+Assert-Contains $testCompose 'MOREDIAN_RETENTION_DAYS: ${MOREDIAN_RETENTION_DAYS:-180}' 'Test backend must cap Moredian retention at 180 days by default.'
+Assert-Contains $testCompose 'MOREDIAN_MAX_EVENTS: ${MOREDIAN_MAX_EVENTS:-60000}' 'Test backend must cap Moredian events at 60000 by default.'
+Assert-Contains $testCompose 'MOREDIAN_CLEANUP_INTERVAL_MS: ${MOREDIAN_CLEANUP_INTERVAL_MS:-604800000}' 'Test backend must clean Moredian events every seven days by default.'
+Assert-Contains $envExample 'MOREDIAN_ORG_AUTH_KEY=' 'Environment example must declare the Moredian auth key.'
+if ($envExample -match '(?m)^MOREDIAN_ORG_AUTH_KEY=[^\r\n]+$') { throw 'Example file must not contain a Moredian auth key.' }
 Assert-UniqueMigrationVersions @(
   (Join-Path $root 'src\backend\src\main\resources\db\migration'),
   (Join-Path $root 'src\backend\src\main\resources\db\dingtalk-test')
@@ -55,4 +60,4 @@ Assert-UniqueMigrationVersions @(
   (Join-Path $root 'src\backend\src\main\resources\db\local')
 ) 'Local Flyway locations must use unique migration versions.'
 
-Write-Host 'PASS DingTalk test deployment contract (20 cases)'
+Write-Host 'PASS DingTalk test deployment contract (25 cases)'

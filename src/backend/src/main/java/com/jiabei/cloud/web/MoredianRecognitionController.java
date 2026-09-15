@@ -61,16 +61,16 @@ public class MoredianRecognitionController {
       @RequestParam(required = false) String signature,
       @RequestBody String raw) {
     if (raw.getBytes(StandardCharsets.UTF_8).length > MAX_BODY_BYTES) {
-      log.warn("Moredian callback rejected: result=PAYLOAD_TOO_LARGE");
+      log.warn("Moredian callback alert: alertType=PAYLOAD_TOO_LARGE");
       throw new BusinessException(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "回调内容过大。");
     }
     if (!expectedOrg.equals(orgId)) {
-      log.warn("Moredian callback ignored: result=ORG_MISMATCH");
+      log.warn("Moredian callback alert: alertType=ORG_MISMATCH");
       return ok();
     }
     if (requireSignature
         && !signatures.verify(raw, nonce, orgId, signVersion, timestamp, signature, key)) {
-      log.warn("Moredian callback rejected: result=INVALID_SIGNATURE");
+      log.warn("Moredian callback alert: alertType=INVALID_SIGNATURE");
       throw new BusinessException(HttpStatus.FORBIDDEN, "INVALID_SIGNATURE", "回调签名无效。");
     }
 
@@ -79,7 +79,9 @@ public class MoredianRecognitionController {
       JsonNode root = json.readTree(raw);
       String callbackTag = root.path("callbackTag").asText();
       if (!"REC_SUCCESS".equals(callbackTag)) {
-        log.info("Moredian callback ignored: result=UNSUPPORTED_TAG, callbackTag={}", safe(callbackTag));
+        log.warn(
+            "Moredian callback alert: alertType=UNSUPPORTED_TAG, callbackTag={}",
+            safe(callbackTag));
         return ok();
       }
 
@@ -92,7 +94,7 @@ public class MoredianRecognitionController {
       }
       if (!expectedDevice.equals(device)) {
         log.warn(
-            "Moredian callback ignored: result=DEVICE_MISMATCH, callbackTag={}, memberId={}, deviceSn={}",
+            "Moredian callback alert: alertType=DEVICE_MISMATCH, callbackTag={}, memberId={}, deviceSn={}",
             callbackTag, mask(member), mask(device));
         return ok();
       }
@@ -102,15 +104,23 @@ public class MoredianRecognitionController {
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {
-      log.warn("Moredian callback rejected: result=INVALID_CALLBACK");
+      log.warn("Moredian callback alert: alertType=INVALID_CALLBACK");
       throw new BusinessException(HttpStatus.BAD_REQUEST, "INVALID_CALLBACK", "回调字段无效。");
     }
 
     String dedup = sha256(
         orgId + "|" + callback.member() + "|" + callback.device() + "|" + callback.recognized());
     String traceId = "moredian-" + dedup.substring(0, 12);
-    boolean inserted = attendance.ingest(
-        dedup, orgId, callback.device(), callback.member(), callback.occurredAt(), raw, traceId);
+    boolean inserted;
+    try {
+      inserted = attendance.ingest(
+          dedup, orgId, callback.device(), callback.member(), callback.occurredAt(), raw, traceId);
+    } catch (RuntimeException e) {
+      log.error(
+          "Moredian callback alert: alertType=PROCESSING_FAILED, dedupPrefix={}, traceId={}",
+          dedup.substring(0, 12), traceId, e);
+      throw e;
+    }
     log.info(
         "Moredian callback processed: result={}, callbackTag={}, memberId={}, deviceSn={}, recognizeTime={}, dedupPrefix={}, traceId={}",
         inserted ? "ACCEPTED" : "DUPLICATE", callback.tag(), mask(callback.member()),
