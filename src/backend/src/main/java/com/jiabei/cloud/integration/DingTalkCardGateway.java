@@ -1,6 +1,7 @@
 package com.jiabei.cloud.integration;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.jiabei.cloud.config.BookingProperties;
@@ -128,11 +129,14 @@ public class DingTalkCardGateway implements CardGateway {
       RestClient.RequestBodySpec request = "POST".equals(method)
           ? http.post().uri(path)
           : http.put().uri(path);
-      request.header(TOKEN_HEADER, client.accessToken())
+      String responseBody = request.header(TOKEN_HEADER, client.accessToken())
           .header(HttpHeaders.CONTENT_TYPE, "application/json")
           .body(body)
           .retrieve()
-          .toBodilessEntity();
+          .body(String.class);
+      if (path.endsWith("/createAndDeliver")) {
+        validateCreateAndDeliverResponse(responseBody);
+      }
     } catch (RestClientResponseException error) {
       int status = error.getStatusCode().value();
       if (status == 401) {
@@ -153,6 +157,29 @@ public class DingTalkCardGateway implements CardGateway {
       throw error;
     } catch (RuntimeException error) {
       throw new CardGatewayException("DINGTALK_UNAVAILABLE", true, false);
+    }
+  }
+
+  private static void validateCreateAndDeliverResponse(String responseBody) {
+    try {
+      JsonNode response = JSON.readTree(responseBody);
+      JsonNode deliverResults = response.path("result").path("deliverResults");
+      boolean delivered = response.path("success").asBoolean(false)
+          && deliverResults.isArray()
+          && !deliverResults.isEmpty();
+      if (delivered) {
+        for (JsonNode result : deliverResults) {
+          if (!result.path("success").asBoolean(false)) {
+            delivered = false;
+            break;
+          }
+        }
+      }
+      if (!delivered) {
+        throw new CardGatewayException("DINGTALK_DELIVERY_FAILED", true, false);
+      }
+    } catch (JsonProcessingException | NullPointerException error) {
+      throw new CardGatewayException("DINGTALK_RESPONSE_INVALID", true, false);
     }
   }
 

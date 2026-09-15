@@ -60,7 +60,9 @@ class DingTalkCardGatewayTest {
               "imGroupOpenDeliverModel":{"robotCode":"robot-code"}
             }
             """, false))
-        .andRespond(withSuccess());
+        .andRespond(withSuccess("""
+            {"success":true,"result":{"deliverResults":[{"success":true,"spaceType":"IM_GROUP","spaceId":"group-1"}]}}
+            """, MediaType.APPLICATION_JSON));
 
     gateway.create(payload());
     server.verify();
@@ -85,12 +87,14 @@ class DingTalkCardGatewayTest {
               }
             }
             """, false))
-        .andRespond(withSuccess());
+        .andRespond(withSuccess("""
+            {"success":true,"result":{"deliverResults":[{"success":true,"spaceType":"IM_GROUP","spaceId":"group-1"}]}}
+            """, MediaType.APPLICATION_JSON));
 
     gateway.create(new CardPayload(
         "late-1", "group-1", "late-template", LocalDate.of(2026, 9, 14),
         Map.of(
-            "reminder_markdown", "@玲玲 姐姐，请尽快签到 ✨",
+            "reminder_markdown", "<a atId=streamer-1>玲玲</a> 姐姐，请尽快签到 ✨",
             "at_user_id", "streamer-1",
             "at_user_name", "玲玲"),
         Map.of(), 1));
@@ -119,6 +123,24 @@ class DingTalkCardGatewayTest {
         Map.of(), 1));
     server.verify();
   }
+  @Test
+  void rejectsSuccessfulHttpResponseWhenCardDeliveryFailed() {
+    server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances/createAndDeliver"))
+        .andRespond(withSuccess("""
+            {"success":true,"result":{"deliverResults":[
+              {"success":false,"spaceType":"IM_GROUP","spaceId":"group-1",
+               "errorMsg":"target user is not in the group"}
+            ]}}
+            """, MediaType.APPLICATION_JSON));
+
+    assertThatThrownBy(() -> gateway.create(payload()))
+        .isInstanceOfSatisfying(CardGatewayException.class, error -> {
+          org.assertj.core.api.Assertions.assertThat(error.code())
+              .isEqualTo("DINGTALK_DELIVERY_FAILED");
+          org.assertj.core.api.Assertions.assertThat(error.retryable()).isTrue();
+        });
+  }
+
   @Test
   void updatesCardDataByBusinessKey() {
     server.expect(requestTo("https://api.dingtalk.test/v1.0/card/instances"))

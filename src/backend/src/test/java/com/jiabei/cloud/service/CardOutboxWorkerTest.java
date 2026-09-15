@@ -109,5 +109,8 @@ class CardOutboxWorkerTest {
 
     verify(projection, never()).projectLate(any());
     verify(gateway, never()).create(any());
+    verify(jdbc).update(
+        "UPDATE late_notification SET status='FAILED',last_error_code='NOT_ELIGIBLE',updated_at=now() WHERE appointment_id=? AND status='PENDING'",
+        appointmentId);
   }
 }
