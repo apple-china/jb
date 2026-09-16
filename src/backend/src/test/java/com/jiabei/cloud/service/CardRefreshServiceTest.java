@@ -31,4 +31,21 @@ class CardRefreshServiceTest {
     verify(jdbc, times(3)).update(startsWith("UPDATE daily_card"), any(Object[].class));
     verify(jdbc, times(3)).update(startsWith("INSERT INTO integration_job"), any(Object[].class));
   }
+
+  @Test
+  void midnightRefreshAlsoRemovesTheStaleYesterdayLabelFromThePreviousCard() {
+    JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    when(jdbc.update(startsWith("UPDATE daily_card"), any(Object[].class))).thenReturn(1);
+    ZoneId zone = ZoneId.of("Asia/Shanghai");
+    BookingProperties props = new BookingProperties(
+        zone, 10, 20, 20, 1, 120, 10,
+        "group", "schedule", "late", "https://example.test", 5);
+    CardRefreshService service = new CardRefreshService(
+        jdbc, props, Clock.fixed(Instant.parse("2026-09-15T16:00:00Z"), zone));
+
+    service.refreshRelativeDateLabels();
+
+    verify(jdbc, times(4)).update(startsWith("UPDATE daily_card"), any(Object[].class));
+    verify(jdbc, times(4)).update(startsWith("INSERT INTO integration_job"), any(Object[].class));
+  }
 }

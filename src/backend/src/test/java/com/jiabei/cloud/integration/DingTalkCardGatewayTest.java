@@ -55,7 +55,7 @@ class DingTalkCardGatewayTest {
               "privateData":{"user-1":{"cardParamMap":{"my_appointment":"08:00"}}},
               "imGroupOpenSpaceModel":{
                 "supportForward":false,
-                "lastMessageI18n":{"ZH_CN":"化妆预约卡片 周一"}
+                "lastMessageI18n":{"ZH_CN":"预约安排 周一"}
               },
               "imGroupOpenDeliverModel":{"robotCode":"robot-code"}
             }
@@ -76,6 +76,7 @@ class DingTalkCardGatewayTest {
             {
               "cardAtUserIds":["streamer-1"],
               "imGroupOpenSpaceModel":{
+                "lastMessageI18n":{"ZH_CN":"预约提醒 @玲玲"},
                 "notification":{
                   "notificationOff":false,
                   "alertContent":"@玲玲 姐姐，请尽快签到 ✨"

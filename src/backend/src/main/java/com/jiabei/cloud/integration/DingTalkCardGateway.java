@@ -58,6 +58,8 @@ public class DingTalkCardGateway implements CardGateway {
     String groupId = required(payload.groupId(), "群会话 ID");
     String robotCode = required(properties.getClientId(), "机器人编码");
     String atUserId = payload.cardData().get("at_user_id");
+    String atUserName = atUserId == null || atUserId.isBlank()
+        ? null : valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
     if (atUserId != null && !atUserId.isBlank()
         && (payload.templateId() == null || payload.templateId().isBlank())) {
       sendLateReminderText(payload, groupId, robotCode, atUserId);
@@ -70,12 +72,13 @@ public class DingTalkCardGateway implements CardGateway {
     Map<String, Object> groupSpace = new LinkedHashMap<>();
     groupSpace.put("supportForward", false);
     groupSpace.put("lastMessageI18n", Map.of(
-        "ZH_CN", "化妆预约卡片 " + chineseWeekday(payload.businessDate())));
+        "ZH_CN", atUserName == null
+            ? "预约安排 " + chineseWeekday(payload.businessDate())
+            : "预约提醒 @" + atUserName));
     body.put("imGroupOpenSpaceModel", groupSpace);
     Map<String, Object> deliver = new LinkedHashMap<>();
     deliver.put("robotCode", robotCode);
     if (atUserId != null && !atUserId.isBlank()) {
-      String atUserName = valueOrDefault(payload.cardData().get("at_user_name"), atUserId);
       deliver.put("atUserIds", Map.of(atUserId, atUserName));
       body.put("cardAtUserIds", List.of(atUserId));
       String alertContent = valueOrDefault(payload.cardData().get("reminder_markdown"),
