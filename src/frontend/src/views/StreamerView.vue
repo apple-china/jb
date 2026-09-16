@@ -14,7 +14,7 @@ import { useAppToast } from '../composables/useAppToast'
 import { api, ApiError } from '../api'
 import type { BookingContext, CurrentUser } from '../types'
 import { restoreSession, signOut } from '../auth'
-import streamerAvatar from '../../../../assets/主播.png'
+import streamerAvatar from '../assets/主播.png'
 
 const router = useRouter()
 const user = ref<CurrentUser | null>(null)

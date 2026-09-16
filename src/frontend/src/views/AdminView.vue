@@ -18,9 +18,9 @@ import { avatarInitial } from '../utils/display'
 import { dateRangePreset, type RangePreset } from '../utils/dateRanges'
 import { formatLastSeen } from '../utils/lastSeen'
 import { restoreSession, signOut } from '../auth'
-import makeupAvatar from '../../../../assets/化妆师.png'
-import streamerAvatar from '../../../../assets/主播.png'
-import systemAvatar from '../../../../assets/系统人员.png'
+import makeupAvatar from '../assets/化妆师.png'
+import streamerAvatar from '../assets/主播.png'
+import systemAvatar from '../assets/系统人员.png'
 
 const router = useRouter()
 const route = useRoute()
