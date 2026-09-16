@@ -7,6 +7,7 @@ defineProps<{
   autocomplete: string
   placeholder: string
   maxlength?: number
+  name?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const visible = ref(false)
@@ -20,6 +21,7 @@ const visible = ref(false)
       :autocomplete="autocomplete"
       :placeholder="placeholder"
       :maxlength="maxlength"
+      :name="name ?? 'password'"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <button

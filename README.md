@@ -82,7 +82,7 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 `dingtalk-test` 使用独立数据库 `jiabei_dingtalk_test` 和生产迁移，不加载 V7 Mock 数据；首次启动仅创建一个未绑定钉钉 ID 的超管。设置 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET` 后，后端启动时及每 5 分钟全量核对通讯录，离职员工逻辑删除并停用已关联账号。密钥只允许由进程环境注入。
 
-前端构建设置 `VITE_ENABLE_MOCK_LOGIN=false`、`VITE_DINGTALK_AUTO_LOGIN=true`；仅验收环境可设置 `VITE_DINGTALK_TEST_DIAGNOSTICS=true`。该环境保留账号密码和钉钉免登，但不显示固定角色快捷登录，也不允许在设置页点击人员切换身份。
+前端构建设置 `VITE_ENABLE_MOCK_LOGIN=false`、`VITE_DINGTALK_AUTO_LOGIN=true`。该环境保留账号密码和钉钉免登，但不显示固定角色快捷登录，也不允许在设置页点击人员切换身份。
 
 服务器首次切换到钉钉测试环境时，从示例复制一份不入库的配置文件，并填写数据库密码、钉钉公开标识、应用密钥及公网来源：
 

@@ -1,0 +1,22 @@
+.brand strong{color:var(--orange-dark)}
+.brand span{color:#2563b8}
+.admin-sidebar .brand span{color:#2563b8}
+.password-field{display:grid;grid-template-columns:minmax(0,1fr) 44px;overflow:hidden;border:1px solid #dfe3eb;border-radius:12px;background:#fff}
+.password-login .password-field input{min-width:0;width:100%;border:0!important;border-radius:0!important;padding:0 12px!important;outline:0}
+.password-visibility{position:static!important;width:44px!important;height:44px!important;min-width:44px;min-height:44px;aspect-ratio:1;border-radius:0!important;border-left:1px solid #edf0f5!important}
+.login-submit:disabled{opacity:1!important;background:#fff1e6!important;color:#b95b16!important;border:1px solid #f4c49e!important;box-shadow:none!important}
+.auth-landing{min-height:100vh;background:#f5f7fb}
+.auth-overlay{position:fixed;z-index:500;inset:0;display:grid;place-items:center;padding:24px;background:rgba(246,248,252,.86);backdrop-filter:blur(8px)}
+.auth-progress{min-width:220px;display:grid;justify-items:center;gap:14px;padding:26px;border:1px solid rgba(255,255,255,.9);border-radius:24px;background:rgba(255,255,255,.96);box-shadow:0 18px 45px rgba(24,34,59,.12)}
+.auth-progress .brand{justify-self:stretch}.auth-progress p{margin:0;color:var(--muted);font-size:13px}
+.auth-spinner{width:28px;height:28px;border:3px solid #ffe1c7;border-top-color:var(--orange);border-radius:50%;animation:auth-spin .75s linear infinite}
+@keyframes auth-spin{to{transform:rotate(360deg)}}
+.export-summary{margin:0;display:grid;gap:0;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.export-summary div{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.export-summary div:last-child{border-bottom:0}.export-summary dt{color:var(--muted)}.export-summary dd{margin:0;text-align:right;font-weight:700;overflow-wrap:anywhere}
+@media(max-width:720px){
+  .admin-sidebar{height:56px;padding:0 14px}
+  .admin-sidebar .brand{gap:8px}.admin-sidebar .brand.compact img{width:30px;height:30px}.admin-sidebar .brand.compact strong{font-size:15px}.admin-sidebar .brand.compact span{font-size:10px;margin-top:2px}
+  .admin-main{padding-top:16px}.admin-user>span{font-size:12px!important}.admin-avatar{width:34px!important;height:34px!important}
+}
+@media(max-width:360px){.login-card{padding:24px 20px}.brand{gap:10px}.brand img{width:46px;height:46px}.brand strong{font-size:21px}}

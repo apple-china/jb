@@ -25,9 +25,8 @@ export function currentDingTalkCorpId(){
   return fromUrl||configured||'CORPID'
 }
 
-export function missingAuthCodeMessage(corpId=currentDingTalkCorpId(),now=new Date()){
-  const part=(value:number)=>String(value).padStart(2,'0')
-  return `${part(now.getHours())}:${part(now.getMinutes())}:${part(now.getSeconds())} 未获取到免登码:${corpId}`
+export function isDingTalkEnvironment(){
+  return !!window.dd?.requestAuthCode||dingTalkSdk.env.platform!=='notInDingTalk'
 }
 
 async function requestFromInjectedApi(api:InjectedDingTalkApi,clientId:string,corpId:string){
@@ -36,7 +35,7 @@ async function requestFromInjectedApi(api:InjectedDingTalkApi,clientId:string,co
     corpId,
     success:result=>result.code
       ? resolve(result.code)
-      : reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')),
+      : reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','钉钉授权信息无效')),
     fail:()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')),
   }))
 }
@@ -66,7 +65,7 @@ export async function requestDingTalkAuthCode(){
   try{
     // requestAuthCode 无需 dd.config，授权码只能使用一次，取得后立即交给后端换取用户身份。
     const result=await dingTalkSdk.requestAuthCode({clientId,corpId})
-    if(!result.code)throw new DingTalkClientError('DINGTALK_CODE_EMPTY','未获取到免登码')
+    if(!result.code)throw new DingTalkClientError('DINGTALK_CODE_EMPTY','钉钉授权信息无效')
     return {authCode:result.code,corpId}
   }catch(error){
     if(error instanceof DingTalkClientError)throw error

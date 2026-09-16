@@ -14,6 +14,7 @@ import { useAppToast } from '../composables/useAppToast'
 import { avatarInitial } from '../utils/display'
 import { api, ApiError } from '../api'
 import type { BookingContext, CurrentUser } from '../types'
+import { restoreSession, signOut } from '../auth'
 
 const router = useRouter()
 const user = ref<CurrentUser | null>(null)
@@ -55,7 +56,7 @@ function attendanceLabel(value:string){return ({PENDING:'待到司',ARRIVED:'已
 async function initialize() {
   loading.value = true
   try {
-    user.value = await api.me()
+    user.value = await restoreSession()
     if (user.value.role !== 'STREAMER') { await router.replace('/admin'); return }
     const initial = await api.bookingContext()
     selectedDate.value = initial.recommendedDate
@@ -110,7 +111,7 @@ async function cancelBooking() {
   } catch(e){ showApiError(e,'取消失败，请稍后重试。') }
   finally { submitting.value = false }
 }
-async function logout(){ logoutOpen.value=false;try{await api.logout()}finally{sessionStorage.clear();await router.replace('/login')} }
+async function logout(){ logoutOpen.value=false;await signOut();await router.replace('/login') }
 onMounted(initialize)
 </script>
 
