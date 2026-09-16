@@ -201,6 +201,9 @@ public class OpenApiDocumentation {
     add(m,HttpMethod.POST,"/api/v1/appointments/{id}/cancel","主播取消本人预约","取消当前主播的有效预约并冻结签到结果；每日最多自行取消 2 次。","预约",OpenApiModels.AppointmentMutation.class,false,false,ErrorProfile.BOOKING,"预约取消成功。","必须回传最新 version 并提供 Idempotency-Key。");
 
     add(m,HttpMethod.GET,"/api/v1/admin/appointments","分页查询预约记录","管理员、观察员或化妆师查询可见预约。date 存在时优先于 startDate/endDate；未给区间时默认本月一日至今天。","预约管理",OpenApiModels.AppointmentPage.class,false,false,ErrorProfile.READ,"查询成功。","");
+    add(m,HttpMethod.GET,"/api/v1/admin/appointments/options","查询代预约候选资源","按日期返回可代预约主播、符合排班的化妆师和启用团队；修改时可传 appointmentId 排除自身冲突。","预约管理",Map.class,false,false,ErrorProfile.READ,"候选资源获取成功。","");
+    add(m,HttpMethod.GET,"/api/v1/admin/appointments/availability","查询管理端可用时段","返回管理端可选时段、冲突标记和不可用原因；appointmentId 仅用于修改时排除当前预约。","预约管理",OpenApiModels.Availability.class,false,false,ErrorProfile.READ,"时段获取成功。","");
+    add(m,HttpMethod.GET,"/api/v1/admin/analytics","查询预约统计","超管、运营和观察员按预约日期区间查看汇总、每日趋势和主播统计。","预约管理",Map.class,false,false,ErrorProfile.READ,"统计获取成功。","");
     add(m,HttpMethod.GET,"/api/v1/admin/appointments/export","导出预约记录","管理员按筛选条件导出 XLSX；响应文件名包含实际日期区间。","预约管理",Void.class,false,true,ErrorProfile.READ,"导出成功。","");
     add(m,HttpMethod.GET,"/api/v1/admin/appointments/{id}","查看预约详情","返回预约双 ID、创建来源、取消信息、结构化修改记录和兼容审计数据；化妆师只能查看自己的预约。","预约管理",OpenApiModels.AppointmentDetail.class,false,false,ErrorProfile.READ,"详情获取成功。","");
     add(m,HttpMethod.POST,"/api/v1/admin/appointments","创建代预约","有代预约权限的管理员或化妆师为主播创建预约；化妆师只能使用自己的资源。","预约管理",OpenApiModels.AppointmentMutation.class,false,false,ErrorProfile.BOOKING,"代预约创建成功。","必须提供 Idempotency-Key；reason 为代预约原因。");
@@ -212,7 +215,7 @@ public class OpenApiDocumentation {
     add(m,HttpMethod.GET,"/api/v1/admin/accounts","查询账号列表","返回当前管理员可管理的账号、角色、权限、关联资源和版本信息。","账号管理",OpenApiModels.Account.class,true,false,ErrorProfile.READ,"账号列表获取成功。","");
     add(m,HttpMethod.POST,"/api/v1/admin/accounts","添加账号","使用未注册钉钉身份添加主播、化妆师、运营或观察员；化妆师会同步创建资源。","账号管理",OpenApiModels.Account.class,false,false,ErrorProfile.RESOURCE,"账号添加成功。","钉钉用户 ID 和姓名创建后不可修改。");
     add(m,HttpMethod.PATCH,"/api/v1/admin/accounts/{id}","修改账号","修改昵称、角色、启用状态和角色专属权限；角色切换会同步化妆师资源状态。","账号管理",OpenApiModels.Account.class,false,false,ErrorProfile.RESOURCE,"账号修改成功。","仅提交需要变更的可空字段，并回传最新 version。");
-    add(m,HttpMethod.POST,"/api/v1/admin/accounts/{id}/assign-password","分配临时密码","为账号生成密码登录账号并返回一次性临时密码；再次分配会更新凭据版本。","账号管理",OpenApiModels.Credential.class,false,false,ErrorProfile.RESOURCE,"密码分配成功。","响应中的临时密码必须安全交付，服务端不会再次返回。");
+    add(m,HttpMethod.POST,"/api/v1/admin/accounts/{id}/assign-password","分配登录密码","为账号生成密码登录账号并返回一次性密码；不会限制钉钉免登，也不要求首次登录修改密码。","账号管理",OpenApiModels.Credential.class,false,false,ErrorProfile.RESOURCE,"密码分配成功。","响应中的密码必须安全交付，服务端不会再次返回。");
     add(m,HttpMethod.POST,"/api/v1/admin/accounts/{id}/revoke-password","回收密码","删除账号的密码登录能力并使现有密码会话失效；钉钉登录不受影响。","账号管理",Void.class,false,false,ErrorProfile.RESOURCE,"密码回收成功。","无需请求体。");
 
     add(m,HttpMethod.GET,"/api/v1/admin/makeup-artists","查询化妆师资源","返回可见化妆师的排班、出勤、启用状态和版本。化妆师角色仅能看到自己的资源。","资源与设置",OpenApiModels.MakeupArtist.class,true,false,ErrorProfile.READ,"化妆师列表获取成功。","");

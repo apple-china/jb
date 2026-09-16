@@ -4,6 +4,9 @@ $root = Split-Path -Parent $PSScriptRoot
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\tests\reset-local.Tests.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'reset-local safety tests failed.' }
 
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\tests\dingtalk-test-deployment.Tests.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'DingTalk test deployment contract failed.' }
+
 $maven = Get-Command mvn -ErrorAction SilentlyContinue
 if (-not $maven) {
   $portableJdk = Join-Path $root '.tools\jdk\jdk-21.0.12.1+1'

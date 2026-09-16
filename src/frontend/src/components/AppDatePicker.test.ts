@@ -10,6 +10,8 @@ describe('AppDatePicker',()=>{
     await wrapper.get('button[aria-label="下个月"]').trigger('click')
     expect(wrapper.text()).toContain('2026年 10月')
     await wrapper.get('button[aria-label="2026-10-01"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.get('.calendar-actions .confirm').trigger('click')
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['2026-10-01'])
   })
   it('closes on Escape',async()=>{

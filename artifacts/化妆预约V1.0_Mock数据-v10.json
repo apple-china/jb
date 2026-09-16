@@ -1,0 +1,128 @@
+{
+  "publicData": {
+    "data_date": "09-15 周二",
+    "update_time": "更新于08:35",
+    "appointment_list": [
+      {
+        "time": "08:00",
+        "streamer": "玲玲",
+        "status": "",
+        "makeup_artist": "小贝老师",
+        "team": "星河一团",
+        "row_light_color": "#A6AAB3",
+        "row_dark_color": "#7C818B",
+        "status_color": "gray",
+        "status_visible": false,
+        "status_placeholder_visible": true
+      },
+      {
+        "time": "08:30",
+        "streamer": "米粒",
+        "status": "签到",
+        "makeup_artist": "小美老师",
+        "team": "晨光二团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "green",
+        "status_visible": true,
+        "status_placeholder_visible": false
+      },
+      {
+        "time": "09:00",
+        "streamer": "安娜",
+        "status": "迟到",
+        "makeup_artist": "张老师",
+        "team": "风尚三团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "orange",
+        "status_visible": true,
+        "status_placeholder_visible": false
+      },
+      {
+        "time": "09:30",
+        "streamer": "小雨",
+        "status": "未到",
+        "makeup_artist": "李老师",
+        "team": "云朵四团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "red",
+        "status_visible": true,
+        "status_placeholder_visible": false
+      },
+      {
+        "time": "10:00",
+        "streamer": "可可",
+        "status": "",
+        "makeup_artist": "王老师",
+        "team": "光影五团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "blue",
+        "status_visible": false,
+        "status_placeholder_visible": true
+      },
+      {
+        "time": "10:30",
+        "streamer": "甜甜",
+        "status": "",
+        "makeup_artist": "小贝老师",
+        "team": "星河一团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "blue",
+        "status_visible": false,
+        "status_placeholder_visible": true
+      },
+      {
+        "time": "11:00",
+        "streamer": "佳佳",
+        "status": "",
+        "makeup_artist": "小美老师",
+        "team": "晨光二团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "blue",
+        "status_visible": false,
+        "status_placeholder_visible": true
+      },
+      {
+        "time": "11:30",
+        "streamer": "小鹿",
+        "status": "",
+        "makeup_artist": "张老师",
+        "team": "风尚三团",
+        "row_light_color": "#1F2329",
+        "row_dark_color": "#F5F5F5",
+        "status_color": "blue",
+        "status_visible": false,
+        "status_placeholder_visible": true
+      }
+    ],
+    "summary": "8"
+  },
+  "privateData": {
+    "my_visible": true,
+    "my_time": "08:40",
+    "my_makeup_artist": "小贝老师",
+    "my_team": "星河一团",
+    "login_button_text": "查看详情",
+    "login_button_color": "gold",
+    "login_button_url": "https://jb.huixinghub.top",
+    "login_button_visible": true,
+    "login_button_icon": "icon_cloud_tray_filled"
+  },
+  "buttonVariants": {
+    "start": {
+      "login_button_text": "开始预约",
+      "login_button_icon": "icon_position",
+      "login_button_color": "gold"
+    },
+    "detail": {
+      "login_button_text": "查看详情",
+      "login_button_icon": "icon_cloud_tray_filled",
+      "login_button_color": "gold"
+    }
+  }
+}

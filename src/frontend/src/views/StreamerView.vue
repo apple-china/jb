@@ -14,6 +14,7 @@ import { useAppToast } from '../composables/useAppToast'
 import { avatarInitial } from '../utils/display'
 import { api, ApiError } from '../api'
 import type { BookingContext, CurrentUser } from '../types'
+import { restoreSession, signOut } from '../auth'
 
 const router = useRouter()
 const user = ref<CurrentUser | null>(null)
@@ -43,7 +44,7 @@ const selectedMakeupArtist = computed(() => context.value?.makeupArtists.find(t 
 const makeupArtistOptions = computed(() => context.value?.makeupArtists.map(item => ({value:item.id,label:item.name})) ?? [])
 const teamOptions = computed(() => context.value?.teams.map(item => ({value:item.id,label:item.name})) ?? [])
 const canSubmit = computed(() => !!makeupArtistId.value && !!teamId.value && !!startTime.value && !submitting.value)
-const emptyText = computed(() => selectedDate.value === shanghaiDate() ? '今天还没有预约，选个合适的时间从容准备吧。' : '明天还没有预约，提前安排会更从容。')
+const emptyText = computed(() => selectedDate.value === shanghaiDate() ? '今天还未预约，选个时间从容准备吧。' : '明天还未预约，提前安排会更从容。')
 const scheduleTitle = computed(() => selectedDate.value === shanghaiDate() ? '今天' : '明天')
 const bookingTitle = computed(() => `${selectedDate.value===shanghaiDate()?'今天':'明天'} · 妆造安排`)
 const greeting = computed(() => {
@@ -51,11 +52,12 @@ const greeting = computed(() => {
   return hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
 })
 function attendanceLabel(value:string){return ({PENDING:'待到司',ARRIVED:'已到司',NOT_ARRIVED:'未到',LATE:'迟到'} as Record<string,string>)[value]??value}
+function scheduleAttendanceLabel(value:string){return ({PENDING:'待签到',ARRIVED:'已签到',NOT_ARRIVED:'未到',LATE:'迟到'} as Record<string,string>)[value]??value}
 
 async function initialize() {
   loading.value = true
   try {
-    user.value = await api.me()
+    user.value = await restoreSession()
     if (user.value.role !== 'STREAMER') { await router.replace('/admin'); return }
     const initial = await api.bookingContext()
     selectedDate.value = initial.recommendedDate
@@ -110,7 +112,7 @@ async function cancelBooking() {
   } catch(e){ showApiError(e,'取消失败，请稍后重试。') }
   finally { submitting.value = false }
 }
-async function logout(){ logoutOpen.value=false;try{await api.logout()}finally{sessionStorage.clear();await router.replace('/login')} }
+async function logout(){ logoutOpen.value=false;await signOut();await router.replace('/login') }
 onMounted(initialize)
 </script>
 
@@ -142,7 +144,7 @@ onMounted(initialize)
       <section class="section-block">
         <div class="section-heading"><div><span class="eyebrow">DAILY SCHEDULE</span><h2>{{ scheduleTitle }}</h2></div><span>{{ context.dailySchedule.length }} 条</span></div>
         <div v-if="context.dailySchedule.length" class="schedule-list">
-          <div v-for="item in context.dailySchedule" :key="item.startTime+item.makeupArtistName+item.streamerName" :class="{mine:item.isMine}"><TimeText :value="item.startTime" /><span class="schedule-person"><b>{{ item.makeupArtistName }}</b><small>{{ item.streamerName }} · {{ item.teamName }}</small></span><em :class="{mine:item.isMine}">{{ item.isMine?'我的':'已预约' }}</em></div>
+          <div v-for="item in context.dailySchedule" :key="item.startTime+item.makeupArtistName+item.streamerName" :class="{mine:item.isMine}"><TimeText :value="item.startTime" /><span class="schedule-person"><b>{{ item.makeupArtistName }}</b><small>{{ item.streamerName }} · {{ item.teamName }}</small></span><em class="attendance-badge" :class="item.attendanceStatus.toLowerCase()">{{ scheduleAttendanceLabel(item.attendanceStatus) }}</em></div>
         </div>
         <div v-else class="plain-empty">暂无预约安排</div>
       </section>
@@ -153,7 +155,7 @@ onMounted(initialize)
       <div class="form-stack">
         <label><span>化妆师</span><PolishedSelect v-model="makeupArtistId" :options="makeupArtistOptions" placeholder="请选择化妆师" aria-label="化妆师" @change="loadSlots"><template #leading><Sparkles :size="18"/></template></PolishedSelect></label>
         <label><span>团队</span><PolishedSelect v-model="teamId" :options="teamOptions" placeholder="请选择团队" aria-label="团队"><template #leading><UsersRound :size="18"/></template></PolishedSelect></label>
-        <div><span class="field-label">时间</span><TimeWheel v-if="makeupArtistId&&slots.length" v-model="startTime" :slots="slots"/><p v-else class="field-hint time-wheel-empty">请先选择化妆师</p></div>
+        <div><span class="field-label">时间</span><TimeWheel v-if="makeupArtistId&&slots.length" v-model="startTime" :slots="slots"/><p v-else class="field-hint time-wheel-empty">选择化妆师后即可查看可预约时间</p></div>
         <p v-if="context?.defaults.message" class="field-hint">{{ context.defaults.message }}</p>
       </div>
       <template #footer><button class="button primary full" :disabled="!canSubmit" @click="saveBooking">{{ submitting ? '提交中…' : `${bookingMode==='modify'?'确认修改':'确认预约'}${selectedMakeupArtist ? ` · ${selectedMakeupArtist.name}` : ''}` }}</button></template>

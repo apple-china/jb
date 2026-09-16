@@ -5,15 +5,16 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.security.SecureRandom;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,7 +29,6 @@ public class SessionService {
   private final Duration ttl;
   private final boolean secureCookie;
   private final SecureRandom random=new SecureRandom();
-  private final Map<String,Session> sessions=new ConcurrentHashMap<>();
   record Session(UUID userId,int credentialVersion,String csrf,Instant expiresAt,boolean mockLogin){}
 
   public SessionService(JdbcTemplate jdbc,PasswordService passwords,
@@ -68,25 +68,30 @@ public class SessionService {
     UserRow row=rows.getFirst();
     if(!row.active()){auditLogin(row,identity,"LOGIN_DENIED",method,trace);throw new BusinessException(HttpStatus.FORBIDDEN,"USER_NOT_AUTHORIZED","当前账号暂无权限。");}
     String token=randomToken(),csrf=randomToken();
-    sessions.put(token,new Session(row.id(),row.credentialVersion(),csrf,Instant.now().plus(ttl),"MOCK".equals(method)));
-    Cookie cookie=new Cookie(COOKIE,token);cookie.setHttpOnly(true);cookie.setSecure(secureCookie);cookie.setPath("/");cookie.setMaxAge((int)ttl.toSeconds());cookie.setAttribute("SameSite","Lax");response.addCookie(cookie);
+    Instant expiresAt=Instant.now().plus(ttl);
+    jdbc.update("DELETE FROM auth_session WHERE expires_at < now()");
+    jdbc.update("INSERT INTO auth_session(token_hash,user_id,credential_version,csrf_token,mock_login,expires_at) VALUES (?,?,?,?,?,?)",hash(token),row.id(),row.credentialVersion(),csrf,"MOCK".equals(method),java.sql.Timestamp.from(expiresAt));
+    writeCookie(response,token,(int)ttl.toSeconds());
     jdbc.update("UPDATE app_user SET last_login_at=now() WHERE id=?",row.id());auditLogin(row,identity,"LOGIN_SUCCESS",method,trace);
     return row.current(csrf);
   }
 
-  public CurrentUser require(HttpServletRequest request){
-    String token=cookie(request).orElseThrow(BusinessException::unauthorized);Session session=sessions.get(token);
-    if(session==null||session.expiresAt().isBefore(Instant.now())){sessions.remove(token);throw BusinessException.unauthorized();}
+  public CurrentUser require(HttpServletRequest request,HttpServletResponse response){
+    String token=cookie(request).orElseThrow(BusinessException::unauthorized);String tokenHash=hash(token);
+    List<Session> found=jdbc.query("SELECT user_id,credential_version,csrf_token,expires_at,mock_login FROM auth_session WHERE token_hash=?",(rs,n)->new Session(rs.getObject(1,UUID.class),rs.getInt(2),rs.getString(3),rs.getTimestamp(4).toInstant(),rs.getBoolean(5)),tokenHash);
+    if(found.isEmpty()||found.getFirst().expiresAt().isBefore(Instant.now())){jdbc.update("DELETE FROM auth_session WHERE token_hash=?",tokenHash);throw BusinessException.unauthorized();}
+    Session session=found.getFirst();
     List<UserRow> rows=query("SELECT * FROM app_user WHERE id=?",session.userId());
     if(rows.isEmpty()||!rows.getFirst().active()||rows.getFirst().credentialVersion()!=session.credentialVersion()){
-      sessions.remove(token);throw new BusinessException(HttpStatus.FORBIDDEN,"SESSION_INVALIDATED","当前登录已失效，请重新登录。");
+      jdbc.update("DELETE FROM auth_session WHERE token_hash=?",tokenHash);throw new BusinessException(HttpStatus.FORBIDDEN,"SESSION_INVALIDATED","当前登录已失效，请重新登录。");
     }
-    sessions.put(token,new Session(session.userId(),session.credentialVersion(),session.csrf(),Instant.now().plus(ttl),session.mockLogin()));request.setAttribute("mockLogin",session.mockLogin());
+    jdbc.update("UPDATE auth_session SET expires_at=?,updated_at=now() WHERE token_hash=?",java.sql.Timestamp.from(Instant.now().plus(ttl)),tokenHash);
+    writeCookie(response,token,(int)ttl.toSeconds());request.setAttribute("mockLogin",session.mockLogin());
     return rows.getFirst().current(session.csrf());
   }
 
   public void logout(HttpServletRequest request,HttpServletResponse response){
-    cookie(request).ifPresent(sessions::remove);Cookie c=new Cookie(COOKIE,"");c.setPath("/");c.setMaxAge(0);c.setHttpOnly(true);c.setSecure(secureCookie);response.addCookie(c);
+    cookie(request).ifPresent(token->jdbc.update("DELETE FROM auth_session WHERE token_hash=?",hash(token)));writeCookie(response,"",0);
   }
 
   @Transactional
@@ -96,6 +101,7 @@ public class SessionService {
     validatePassword(newPassword);
     boolean storedChangeFlag=actor.role()==CurrentUser.Role.SUPER_ADMIN;
     jdbc.update("UPDATE app_user SET password_hash=?,must_change_password=?,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",passwords.encode(newPassword),storedChangeFlag,actor.id());
+    jdbc.update("DELETE FROM auth_session WHERE user_id=?",actor.id());
     jdbc.update("INSERT INTO audit_log(id,entity_type,entity_id,action,actor_user_id,actor_identity_snapshot,actor_name_snapshot,before_data,after_data,trace_id) VALUES (?,'USER',?,'PASSWORD_CHANGED',?,?,?,CAST('{}' AS jsonb),CAST('{}' AS jsonb),?)",UUID.randomUUID(),actor.id(),actor.id(),actor.loginId(),actor.nickname(),trace);
   }
 
@@ -119,6 +125,8 @@ public class SessionService {
   private String toJson(Object value){try{return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
   private BusinessException invalidCredentials(){return new BusinessException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS","账号或密码不正确。");}
   private String randomToken(){byte[] b=new byte[32];random.nextBytes(b);return Base64.getUrlEncoder().withoutPadding().encodeToString(b);}
+  private String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
+  private void writeCookie(HttpServletResponse response,String value,int maxAge){Cookie cookie=new Cookie(COOKIE,value);cookie.setHttpOnly(true);cookie.setSecure(secureCookie);cookie.setPath("/");cookie.setMaxAge(maxAge);cookie.setAttribute("SameSite","Lax");response.addCookie(cookie);}
   private Optional<String> cookie(HttpServletRequest request){if(request.getCookies()==null)return Optional.empty();for(Cookie c:request.getCookies())if(COOKIE.equals(c.getName()))return Optional.of(c.getValue());return Optional.empty();}
 
   record UserRow(UUID id,String username,String passwordHash,String dingTalkUserId,String nickname,CurrentUser.Role role,UUID makeupArtistId,boolean active,boolean canModify,boolean canCancel,boolean canCreate,boolean mustChange,int credentialVersion){

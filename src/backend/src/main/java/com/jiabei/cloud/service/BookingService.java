@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,8 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 控制器只负责协议转换，业务约束必须保留在本服务中，避免通过直接调用 API 绕过。</p>
  */
 public class BookingService {
-  private final JdbcTemplate jdbc;private final BookingPolicy policy;private final BookingProperties props;private final Clock clock;private final ObjectMapper json;private final AttendanceService attendance;
-  public BookingService(JdbcTemplate jdbc,BookingPolicy policy,BookingProperties props,Clock clock,ObjectMapper json,AttendanceService attendance){this.jdbc=jdbc;this.policy=policy;this.props=props;this.clock=clock;this.json=json;this.attendance=attendance;}
+  private final JdbcTemplate jdbc;private final BookingPolicy policy;private final BookingProperties props;private final Clock clock;private final ObjectMapper json;private final AttendanceService attendance;private final CardRefreshService cards;
+  @Autowired public BookingService(JdbcTemplate jdbc,BookingPolicy policy,BookingProperties props,Clock clock,ObjectMapper json,AttendanceService attendance,CardRefreshService cards){this.jdbc=jdbc;this.policy=policy;this.props=props;this.clock=clock;this.json=json;this.attendance=attendance;this.cards=cards;}
+  BookingService(JdbcTemplate jdbc,BookingPolicy policy,BookingProperties props,Clock clock,ObjectMapper json,AttendanceService attendance){this(jdbc,policy,props,clock,json,attendance,new CardRefreshService(jdbc,props,clock));}
 
   /** 聚合预约页首屏数据；未指定日期时优先推荐今天，没有可用时段才推荐明天。 */
   public Map<String,Object> context(CurrentUser actor,LocalDate requested){
@@ -57,16 +59,45 @@ public class BookingService {
    * 但只有具备覆盖权限的角色可以提交冲突预约。</p>
    */
   public Map<String,Object> availability(CurrentUser actor,LocalDate date,UUID makeupArtistId){
+    return availability(actor,date,makeupArtistId,null);
+  }
+
+  private Map<String,Object> availability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID excludeAppointmentId){
     policy.validateDate(date,LocalDate.now(clock));MakeupArtist makeupArtist=makeupArtist(makeupArtistId);List<Map<String,Object>> slots=new ArrayList<>();boolean conflictAllowed=actor.isAdministrator()||actor.role()==CurrentUser.Role.MAKEUP;
     LocalTime first=makeupArtist.scheduleEnabled()?makeupArtist.workStart():LocalTime.MIDNIGHT;
     int slotCount=makeupArtist.scheduleEnabled()?(int)(java.time.Duration.between(first,makeupArtist.workEnd()).toMinutes()-props.serviceDurationMinutes())/props.timeStepMinutes()+1:24*60/props.timeStepMinutes();
     for(int index=0;index<slotCount;index++){LocalTime t=first.plusMinutes((long)index*props.timeStepMinutes());
       ZonedDateTime start=policy.start(date,t);String reason=null;boolean conflict=false;
       try{policy.validateMakeupArtist(date,t,makeupArtist.workDays(),makeupArtist.workStart(),makeupArtist.workEnd(),makeupArtist.scheduleEnabled(),makeupArtist.active(),makeupArtist.attending());if(actor.isStreamer())policy.validateStreamerLead(ZonedDateTime.now(clock),start);else policy.validateAdminLead(ZonedDateTime.now(clock),start);}catch(BusinessException e){reason=e.getMessage();}
-      if(reason==null){conflict=overlap(makeupArtistId,start,start.plusMinutes(props.serviceDurationMinutes()),null);if(conflict&&!conflictAllowed)reason="该时段已占用";}
+      if(reason==null){conflict=overlap(makeupArtistId,start,start.plusMinutes(props.serviceDurationMinutes()),excludeAppointmentId);if(conflict&&!conflictAllowed)reason="该时段已占用";}
       Map<String,Object> slot=new LinkedHashMap<>();slot.put("time",t.toString());slot.put("available",reason==null);slot.put("conflict",conflict);slot.put("reason",reason);slots.add(slot);
     }
     return Map.of("slots",slots,"conflictAllowed",conflictAllowed);
+  }
+
+  public Map<String,Object> adminAvailability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID appointmentId){
+    requireProxyActor(actor);
+    if(appointmentId!=null){Map<String,Object> appointment=jdbc.queryForMap("SELECT booking_date,makeup_artist_id FROM appointment WHERE id=?",appointmentId);if(actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(appointment.get("makeup_artist_id")))throw BusinessException.forbidden();if(!date.equals(appointment.get("booking_date")))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"BOOKING_DATE_IMMUTABLE","预约日期不可修改。");}
+    return availability(actor,date,makeupArtistId,appointmentId);
+  }
+
+  public Map<String,Object> adminBookingOptions(CurrentUser actor,LocalDate date,UUID appointmentId){
+    requireProxyActor(actor);policy.validateDate(date,LocalDate.now(clock));
+    List<Map<String,Object>> streamers=jdbc.query("""
+      SELECT coalesce(u.dingtalk_user_id,u.username),u.nickname FROM app_user u
+      WHERE u.role='STREAMER' AND u.is_active AND u.is_attending
+        AND NOT EXISTS (SELECT 1 FROM appointment a WHERE a.streamer_user_id=u.id AND a.booking_date=? AND a.status='ACTIVE')
+      ORDER BY u.nickname
+      """,(rs,n)->Map.of("userId",rs.getString(1),"nickname",rs.getString(2)),date);
+    List<Map<String,Object>> artists=jdbc.query("SELECT id,name,avatar_url,work_days,work_start,work_end,schedule_enabled FROM makeup_artist WHERE is_active AND is_attending ORDER BY name",(rs,n)->{Map<String,Object> m=new LinkedHashMap<>();m.put("id",rs.getObject(1,UUID.class));m.put("name",rs.getString(2));m.put("avatarUrl",Objects.toString(rs.getString(3),""));m.put("workDays",rs.getString(4));m.put("workStart",rs.getObject(5,LocalTime.class));m.put("workEnd",rs.getObject(6,LocalTime.class));m.put("scheduleEnabled",rs.getBoolean(7));return m;});
+    artists.removeIf(item->actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(item.get("id"))||((List<?>)availability(actor,date,(UUID)item.get("id"),appointmentId).get("slots")).stream().noneMatch(slot->Boolean.TRUE.equals(((Map<?,?>)slot).get("available"))));
+    List<Map<String,Object>> teams=jdbc.query("SELECT id,name,logo_url FROM team WHERE is_active ORDER BY name",(rs,n)->Map.of("id",rs.getObject(1,UUID.class),"name",rs.getString(2),"logoUrl",Objects.toString(rs.getString(3),"")));
+    return Map.of("streamers",streamers,"makeupArtists",artists,"teams",teams);
+  }
+
+  private void requireProxyActor(CurrentUser actor){
+    if(actor.role()==CurrentUser.Role.OBSERVER||actor.isStreamer())throw BusinessException.forbidden();
+    if((actor.role()==CurrentUser.Role.MAKEUP||actor.role()==CurrentUser.Role.OPERATOR)&&!actor.mayCreateAppointments()&&!actor.mayModifyAppointments())throw BusinessException.forbidden();
   }
 
   @Transactional
@@ -86,7 +117,7 @@ public class BookingService {
     lock("streamer|"+streamerId+"|"+c.bookingDate());lock("makeupArtist|"+makeupArtistId+"|"+c.bookingDate());
     boolean conflict=overlap(makeupArtistId,start,start.plusMinutes(props.serviceDurationMinutes()),null);if(conflict&&!overrideAllowed)throw new BusinessException(HttpStatus.CONFLICT,"MAKEUP_ARTIST_SLOT_CONFLICT","该化妆师时段已被占用，请重新选择。");
     UUID id=UUID.randomUUID();try{jdbc.update("INSERT INTO appointment(id,booking_date,start_at,end_at,streamer_user_id,makeup_artist_id,team_id,streamer_name_snapshot,makeup_artist_name_snapshot,team_name_snapshot,status,source,conflict_override,created_by_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?)",id,c.bookingDate(),start.toOffsetDateTime(),start.plusMinutes(props.serviceDurationMinutes()).toOffsetDateTime(),streamerId,makeupArtistId,c.teamId(),streamer.name(),makeupArtist.name(),team.name(),actor.role().name(),conflict,actor.id());}catch(DataIntegrityViolationException e){throw constraint(e);}
-    jdbc.update("UPDATE app_user SET last_makeup_artist_id=?,last_start_time=?,last_team_id=?,updated_at=now(),version=version+1 WHERE id=?",makeupArtistId,c.startTime(),c.teamId(),streamerId);attendance.recalculate(id,trace);audit(id,"CREATE",actor,c.reason(),null,Map.of("bookingDate",c.bookingDate(),"startTime",c.startTime(),"makeupArtistName",makeupArtist.name(),"teamName",team.name(),"conflictOverride",conflict),trace);ensureScheduleCard(c.bookingDate(),false);Map<String,Object> result=Map.of("id",id,"status","ACTIVE","version",0,"conflictOverride",conflict);completeIdempotent(actor.id(),operation,key,result);return result;
+    jdbc.update("UPDATE app_user SET last_makeup_artist_id=?,last_start_time=?,last_team_id=?,updated_at=now(),version=version+1 WHERE id=?",makeupArtistId,c.startTime(),c.teamId(),streamerId);attendance.recalculate(id,trace);audit(id,"CREATE",actor,c.reason(),null,Map.of("bookingDate",c.bookingDate(),"startTime",c.startTime(),"makeupArtistName",makeupArtist.name(),"teamName",team.name(),"conflictOverride",conflict),trace);cards.ensureAndRefreshWindow(c.bookingDate(),false);Map<String,Object> result=Map.of("id",id,"status","ACTIVE","version",0,"conflictOverride",conflict);completeIdempotent(actor.id(),operation,key,result);return result;
   }
 
   @Transactional
@@ -95,7 +126,7 @@ public class BookingService {
     Appointment a=appointmentForUpdate(id);requireOwnedActive(actor,a,c.version());ZonedDateTime now=ZonedDateTime.now(clock);policy.validateStreamerLead(now,a.start());policy.validateStep(c.startTime());ZonedDateTime start=policy.start(a.date(),c.startTime());policy.validateStreamerLead(now,start);MakeupArtist makeupArtist=makeupArtist(c.makeupArtistId());Team team=team(c.teamId());validateResources(a.date(),c.startTime(),makeupArtist,team);
     if(a.makeupArtistId().equals(c.makeupArtistId())&&a.teamId().equals(c.teamId())&&a.start().toLocalTime().equals(c.startTime())){Map<String,Object> result=Map.of("id",id,"status","ACTIVE","version",a.version(),"unchanged",true);completeIdempotent(actor.id(),"MODIFY_APPOINTMENT",key,result);return result;}
     lockCounter(a.streamerId(),a.date());int modified=currentCount(a.streamerId(),a.date(),"modify_count");if(modified>=3)throw new BusinessException(HttpStatus.CONFLICT,"MODIFY_LIMIT_REACHED","该预约日期已达到3次自行修改上限，请联系管理员。");lock("makeupArtist|"+c.makeupArtistId()+"|"+a.date());if(overlap(c.makeupArtistId(),start,start.plusMinutes(props.serviceDurationMinutes()),id))throw new BusinessException(HttpStatus.CONFLICT,"MAKEUP_ARTIST_SLOT_CONFLICT","该化妆师时段已被占用，请重新选择。");
-    boolean timeChanged=!a.start().toLocalTime().equals(c.startTime());Map<String,Object> before=changeView(a);updateAppointment(id,c,makeupArtist,team,start,false);incrementCount(a.streamerId(),a.date(),"modify_count");if(timeChanged)attendance.recalculate(id,trace);audit(id,"MODIFY",actor,null,before,Map.of("makeupArtistId",c.makeupArtistId(),"teamId",c.teamId(),"startTime",c.startTime()),trace);refreshScheduleCard(a.date());Map<String,Object> result=Map.of("id",id,"status","ACTIVE","version",a.version()+1,"modifyCount",modified+1);completeIdempotent(actor.id(),"MODIFY_APPOINTMENT",key,result);return result;
+    boolean timeChanged=!a.start().toLocalTime().equals(c.startTime());Map<String,Object> before=changeView(a);updateAppointment(id,c,makeupArtist,team,start,false);incrementCount(a.streamerId(),a.date(),"modify_count");if(timeChanged)attendance.recalculate(id,trace);audit(id,"MODIFY",actor,null,before,Map.of("makeupArtistId",c.makeupArtistId(),"teamId",c.teamId(),"startTime",c.startTime()),trace);cards.refreshExistingWindow();Map<String,Object> result=Map.of("id",id,"status","ACTIVE","version",a.version()+1,"modifyCount",modified+1);completeIdempotent(actor.id(),"MODIFY_APPOINTMENT",key,result);return result;
   }
 
   @Transactional
@@ -114,15 +145,15 @@ public class BookingService {
     Appointment a=appointment(id);if(actor.role()==CurrentUser.Role.MAKEUP&&!a.makeupArtistId().equals(actor.makeupArtistId()))throw BusinessException.forbidden();
     List<Map<String,Object>> rows=jdbc.query("SELECT a.*,coalesce(u.dingtalk_user_id,u.username,u.id::text) identity,(SELECT count(*) FROM appointment p WHERE p.booking_date=a.booking_date AND (p.created_at<a.created_at OR (p.created_at=a.created_at AND p.id<=a.id))) daily_sequence FROM appointment a JOIN app_user u ON u.id=a.streamer_user_id WHERE a.id=?",this::appointmentMap,id);
     Map<String,Object> m=new LinkedHashMap<>(rows.stream().findFirst().orElseThrow());
-    Map<String,Object> metadata=jdbc.queryForMap("SELECT a.source,a.created_at,a.cancelled_at,a.cancel_reason,coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,canceller.nickname cancelled_by_name FROM appointment a LEFT JOIN app_user creator ON creator.id=a.created_by_user_id LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id LEFT JOIN LATERAL (SELECT actor_name_snapshot FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE' ORDER BY created_at LIMIT 1) create_audit ON true WHERE a.id=?",id);
-    m.put("source",metadata.get("source"));m.put("createdAt",metadata.get("created_at"));m.put("createdByName",metadata.get("created_by_name"));m.put("cancelledAt",metadata.get("cancelled_at"));m.put("cancelReason",metadata.get("cancel_reason"));m.put("cancelledByName",metadata.get("cancelled_by_name"));
+    Map<String,Object> metadata=jdbc.queryForMap("SELECT a.source,a.created_at,a.updated_at,a.cancelled_at,a.cancel_reason,coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,canceller.nickname cancelled_by_name FROM appointment a LEFT JOIN app_user creator ON creator.id=a.created_by_user_id LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id LEFT JOIN LATERAL (SELECT actor_name_snapshot FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE' ORDER BY created_at LIMIT 1) create_audit ON true WHERE a.id=?",id);
+    m.put("source",metadata.get("source"));m.put("createdAt",metadata.get("created_at"));m.put("updatedAt",metadata.get("updated_at"));m.put("createdByName",metadata.get("created_by_name"));m.put("cancelledAt",metadata.get("cancelled_at"));m.put("cancelReason",metadata.get("cancel_reason"));m.put("cancelledByName",metadata.get("cancelled_by_name"));
     List<Map<String,Object>> audits=jdbc.query("SELECT action,actor_name_snapshot,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=? ORDER BY created_at DESC",(rs,n)->{Map<String,Object>x=new LinkedHashMap<>();x.put("action",rs.getString(1));x.put("actorName",rs.getString(2));x.put("reason",rs.getString(3));x.put("before",rs.getString(4));x.put("after",rs.getString(5));x.put("createdAt",rs.getObject(6,OffsetDateTime.class));return x;},id);
     m.put("audits",audits);m.put("modifications",audits.stream().filter(x->"MODIFY".equals(x.get("action"))).map(this::modificationView).toList());return m;
   }
 
   @Transactional
   public Map<String,Object> adminModify(CurrentUser actor,UUID id,ModifyCommand c,String trace){
-    if(!actor.mayModifyAppointments())throw BusinessException.forbidden();Appointment a=appointmentForUpdate(id);requireActiveVersion(a,c.version());policy.validateDate(a.date(),LocalDate.now(clock));policy.validateStep(c.startTime());boolean timeChanged=!a.start().toLocalTime().equals(c.startTime());ZonedDateTime start=policy.start(a.date(),c.startTime());if(timeChanged){policy.validateAdminLead(ZonedDateTime.now(clock),a.start());policy.validateAdminLead(ZonedDateTime.now(clock),start);}MakeupArtist makeupArtist=makeupArtist(c.makeupArtistId());Team team=team(c.teamId());validateResources(a.date(),c.startTime(),makeupArtist,team);if(!timeChanged&&a.makeupArtistId().equals(c.makeupArtistId())&&a.teamId().equals(c.teamId()))return Map.of("id",id,"status","ACTIVE","version",a.version(),"unchanged",true);lock("makeupArtist|"+c.makeupArtistId()+"|"+a.date());boolean conflict=overlap(c.makeupArtistId(),start,start.plusMinutes(props.serviceDurationMinutes()),id);Map<String,Object> before=changeView(a);updateAppointment(id,c,makeupArtist,team,start,conflict);if(timeChanged)attendance.recalculate(id,trace);audit(id,"MODIFY",actor,c.reason(),before,Map.of("makeupArtistId",c.makeupArtistId(),"teamId",c.teamId(),"startTime",c.startTime(),"conflictOverride",conflict),trace);refreshScheduleCard(a.date());return Map.of("id",id,"status","ACTIVE","version",a.version()+1,"conflictOverride",conflict);
+    if(!actor.mayModifyAppointments())throw BusinessException.forbidden();Appointment a=appointmentForUpdate(id);requireActiveVersion(a,c.version());policy.validateDate(a.date(),LocalDate.now(clock));policy.validateStep(c.startTime());boolean timeChanged=!a.start().toLocalTime().equals(c.startTime());ZonedDateTime start=policy.start(a.date(),c.startTime());if(timeChanged){policy.validateAdminLead(ZonedDateTime.now(clock),a.start());policy.validateAdminLead(ZonedDateTime.now(clock),start);}MakeupArtist makeupArtist=makeupArtist(c.makeupArtistId());Team team=team(c.teamId());validateResources(a.date(),c.startTime(),makeupArtist,team);if(!timeChanged&&a.makeupArtistId().equals(c.makeupArtistId())&&a.teamId().equals(c.teamId()))return Map.of("id",id,"status","ACTIVE","version",a.version(),"unchanged",true);lock("makeupArtist|"+c.makeupArtistId()+"|"+a.date());boolean conflict=overlap(c.makeupArtistId(),start,start.plusMinutes(props.serviceDurationMinutes()),id);Map<String,Object> before=changeView(a);updateAppointment(id,c,makeupArtist,team,start,conflict);if(timeChanged)attendance.recalculate(id,trace);audit(id,"MODIFY",actor,c.reason(),before,Map.of("makeupArtistId",c.makeupArtistId(),"teamId",c.teamId(),"startTime",c.startTime(),"conflictOverride",conflict),trace);cards.refreshExistingWindow();return Map.of("id",id,"status","ACTIVE","version",a.version()+1,"conflictOverride",conflict);
   }
 
   @Transactional
@@ -131,7 +162,7 @@ public class BookingService {
   }
 
   @Transactional
-  public Map<String,Object> manualScheduleCard(CurrentUser actor,LocalDate date){if(!actor.isAdministrator())throw BusinessException.forbidden();policy.validateDate(date,LocalDate.now(clock));ensureScheduleCard(date,true);return Map.of("businessDate",date,"queued",true);}
+  public Map<String,Object> manualScheduleCard(CurrentUser actor,LocalDate date){if(!actor.isAdministrator())throw BusinessException.forbidden();policy.validateDate(date,LocalDate.now(clock));cards.ensureChronologicalScheduleCard(date,true);return Map.of("businessDate",date,"queued",true);}
 
   /**
    * 查询今天和明天是否曾被钉钉网关实际接收。
@@ -151,8 +182,8 @@ public class BookingService {
   private String jsonValue(JsonNode node,String key){JsonNode value=node.get(key);return value==null||value.isNull()?null:value.asText();}
   private String resourceName(String table,String id){if(id==null||id.isBlank())return id;try{List<String> names=jdbc.query("SELECT name FROM "+table+" WHERE id=?",(rs,n)->rs.getString(1),UUID.fromString(id));return names.isEmpty()?id:names.getFirst();}catch(IllegalArgumentException e){return id;}}
 
-  private void cancel(Appointment a,CurrentUser actor,String reason,String trace){attendance.recalculate(a.id(),trace);jdbc.update("UPDATE appointment SET status='CANCELLED',attendance_frozen=true,cancelled_at=now(),cancelled_by_user_id=?,cancel_reason=?,version=version+1,updated_at=now() WHERE id=?",actor.id(),blankToNull(reason),a.id());audit(a.id(),"CANCEL",actor,reason,Map.of("status","ACTIVE"),Map.of("status","CANCELLED","attendanceFrozen",true),trace);refreshScheduleCard(a.date());}
-  private void updateAppointment(UUID id,ModifyCommand c,MakeupArtist makeupArtist,Team team,ZonedDateTime start,boolean conflict){int n=jdbc.update("UPDATE appointment SET makeup_artist_id=?,team_id=?,start_at=?,end_at=?,makeup_artist_name_snapshot=?,team_name_snapshot=?,conflict_override=?,version=version+1,updated_at=now() WHERE id=? AND version=?",c.makeupArtistId(),c.teamId(),start.toOffsetDateTime(),start.plusMinutes(props.serviceDurationMinutes()).toOffsetDateTime(),makeupArtist.name(),team.name(),conflict,id,c.version());if(n==0)throw versionConflict();}
+  private void cancel(Appointment a,CurrentUser actor,String reason,String trace){attendance.recalculate(a.id(),trace);jdbc.update("UPDATE appointment SET status='CANCELLED',attendance_frozen=true,cancelled_at=now(),cancelled_by_user_id=?,cancel_reason=?,version=version+1,updated_at=now() WHERE id=?",actor.id(),blankToNull(reason),a.id());audit(a.id(),"CANCEL",actor,reason,Map.of("status","ACTIVE"),Map.of("status","CANCELLED","attendanceFrozen",true),trace);cards.refreshExistingWindow();}
+  private void updateAppointment(UUID id,ModifyCommand c,MakeupArtist makeupArtist,Team team,ZonedDateTime start,boolean conflict){int n=jdbc.update("UPDATE appointment SET makeup_artist_id=?,team_id=?,start_at=?,end_at=?,makeup_artist_name_snapshot=?,team_name_snapshot=?,conflict_override=?,card_past_refreshed_at=CASE WHEN start_at<>? THEN NULL ELSE card_past_refreshed_at END,version=version+1,updated_at=now() WHERE id=? AND version=?",c.makeupArtistId(),c.teamId(),start.toOffsetDateTime(),start.plusMinutes(props.serviceDurationMinutes()).toOffsetDateTime(),makeupArtist.name(),team.name(),conflict,start.toOffsetDateTime(),id,c.version());if(n==0)throw versionConflict();}
   private void validateResources(LocalDate date,LocalTime start,MakeupArtist makeupArtist,Team team){policy.validateMakeupArtist(date,start,makeupArtist.workDays(),makeupArtist.workStart(),makeupArtist.workEnd(),makeupArtist.scheduleEnabled(),makeupArtist.active(),makeupArtist.attending());if(!team.active())throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"TEAM_UNAVAILABLE","团队已停用，请选择其他团队。");}
   private List<Map<String,Object>> schedule(LocalDate date,CurrentUser actor){return jdbc.query("SELECT to_char(start_at AT TIME ZONE 'Asia/Shanghai','HH24:MI'),makeup_artist_name_snapshot,team_name_snapshot,streamer_name_snapshot,streamer_user_id,attendance_status,conflict_override FROM appointment WHERE booking_date=? AND status='ACTIVE' ORDER BY start_at",(rs,n)->Map.of("startTime",rs.getString(1),"makeupArtistName",rs.getString(2),"teamName",rs.getString(3),"streamerName",rs.getString(4),"isMine",actor.id().equals(rs.getObject(5,UUID.class)),"attendanceStatus",rs.getString(6),"conflictOverride",rs.getBoolean(7),"booked",true),date);}
   private Map<String,Object> findActive(UUID userId,LocalDate date){List<Map<String,Object>> rows=jdbc.query("SELECT a.*,coalesce(u.dingtalk_user_id,u.username) identity,(SELECT count(*) FROM appointment p WHERE p.booking_date=a.booking_date AND (p.created_at<a.created_at OR (p.created_at=a.created_at AND p.id<=a.id))) daily_sequence FROM appointment a JOIN app_user u ON u.id=a.streamer_user_id WHERE a.streamer_user_id=? AND a.booking_date=? AND a.status='ACTIVE'",this::appointmentMap,userId,date);return rows.isEmpty()?null:rows.getFirst();}
@@ -187,13 +218,6 @@ public class BookingService {
   private void completeIdempotent(UUID actor,String operation,String key,Object response){jdbc.update("UPDATE idempotency_record SET status='SUCCEEDED',response_status=200,response_body=CAST(? AS jsonb),updated_at=now() WHERE actor_user_id=? AND operation=? AND idempotency_key=?",toJson(response),actor,operation,key);}
   private String hash(Object value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsBytes(value)));}catch(Exception e){throw new IllegalStateException(e);}}
   private void audit(UUID entity,String action,CurrentUser actor,String reason,Object before,Object after,String trace){jdbc.update("INSERT INTO audit_log(id,entity_type,entity_id,action,actor_user_id,actor_identity_snapshot,actor_name_snapshot,reason,before_data,after_data,trace_id) VALUES (?,'APPOINTMENT',?,?,?,?,?,?,CAST(? AS jsonb),CAST(? AS jsonb),?)",UUID.randomUUID(),entity,action,actor.id(),actor.loginId(),actor.nickname(),blankToNull(reason),before==null?null:toJson(before),after==null?null:toJson(after),trace);}
-  /**
-   * 只在本地事务中更新卡片版本并写入 Outbox；进入队列不代表发送成功。
-   * 实际成功状态由 {@link CardOutboxWorker} 在网关调用成功后写入。
-   */
-  private void ensureScheduleCard(LocalDate date,boolean allowEmpty){if(!allowEmpty){Integer active=jdbc.queryForObject("SELECT count(*) FROM appointment WHERE booking_date=? AND status='ACTIVE'",Integer.class,date);if(active==null||active==0)return;}String business=props.groupId()+"|"+date;String out="schedule-card-"+date+"-"+Integer.toHexString(props.groupId().hashCode());jdbc.update("INSERT INTO daily_card(id,business_date,group_open_conversation_id,out_track_id,template_id,status,content_version) VALUES (?,?,?,?,?,'PENDING',1) ON CONFLICT(group_open_conversation_id,business_date) DO UPDATE SET content_version=daily_card.content_version+1,updated_at=now()",UUID.randomUUID(),date,props.groupId(),out,props.cardTemplateId());enqueue("CARD_REFRESH",business,Map.of("businessDate",date,"groupId",props.groupId()));}
-  private void refreshScheduleCard(LocalDate date){Integer exists=jdbc.queryForObject("SELECT count(*) FROM daily_card WHERE business_date=? AND group_open_conversation_id=?",Integer.class,date,props.groupId());if(exists!=null&&exists>0)ensureScheduleCard(date,true);}
-  private void enqueue(String type,String key,Object payload){jdbc.update("INSERT INTO integration_job(id,job_type,business_key,payload,status,max_attempts) VALUES (?,?,?,CAST(? AS jsonb),'PENDING',?) ON CONFLICT (job_type,business_key) WHERE status IN ('PENDING','RUNNING','RETRY_WAIT') DO UPDATE SET payload=excluded.payload,next_attempt_at=now(),updated_at=now()",UUID.randomUUID(),type,key,toJson(payload),props.outboxMaxAttempts());}
   private BusinessException constraint(DataIntegrityViolationException e){String message=Objects.toString(e.getMostSpecificCause().getMessage(),"");if(message.contains("uq_active_appointment_streamer_date"))return new BusinessException(HttpStatus.CONFLICT,"DAILY_APPOINTMENT_EXISTS","该主播在这一天已有有效预约。");return new BusinessException(HttpStatus.CONFLICT,"BOOKING_CONFLICT","预约条件已发生变化，请刷新后重试。");}
   private BusinessException terminal(){return new BusinessException(HttpStatus.CONFLICT,"APPOINTMENT_TERMINAL","已取消预约不能再次修改或取消。");}private BusinessException versionConflict(){return new BusinessException(HttpStatus.CONFLICT,"VERSION_CONFLICT","数据已变化，请刷新后重试。");}private BusinessException notFound(){return new BusinessException(HttpStatus.NOT_FOUND,"APPOINTMENT_NOT_FOUND","预约不存在或不可见。");}
   private String blankToNull(String value){return value==null||value.isBlank()?null:value.trim();}private String toJson(Object value){try{return json.writeValueAsString(value);}catch(JsonProcessingException e){throw new IllegalStateException(e);}}
