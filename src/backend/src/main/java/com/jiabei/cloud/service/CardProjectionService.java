@@ -212,6 +212,7 @@ public class CardProjectionService {
   }
 
   static String relativeDateLabel(LocalDate date, LocalDate today) {
+    if (date.equals(today.minusDays(1))) return "昨天";
     if (date.equals(today)) return "今天";
     if (date.equals(today.plusDays(1))) return "明天";
     return "";

@@ -64,7 +64,9 @@ public class CardRefreshService {
 
   @Scheduled(cron="${jiabei.booking.card-relative-date-cron:0 0 0 * * *}", zone="Asia/Shanghai")
   public void refreshRelativeDateLabels() {
-    refreshExistingWindow();
+    LocalDate today = LocalDate.now(clock);
+    // Refresh the day before yesterday once more so its stale "昨天" label is removed.
+    for (int offset = -2; offset <= 1; offset++) refreshExisting(today.plusDays(offset));
   }
 
   public void refreshExisting(LocalDate date) {
