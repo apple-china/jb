@@ -4,7 +4,7 @@ const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).fo
 
 function watchBrowserErrors(page: Page) {
   const errors: string[] = []
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Failed to load resource:')) errors.push(message.text()) })
   page.on('pageerror', error => errors.push(error.message))
   return errors
 }
@@ -53,6 +53,7 @@ test.describe('iPhone 15 Safari', () => {
   test('renders login and streamer pages as touch-first Mobile Safari', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'iphone15-safari', 'Safari-only scenario')
     const errors = watchBrowserErrors(page)
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
     await page.goto('/login')
     await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
     expect(await page.evaluate(() => navigator.userAgent)).toContain('Mobile')
@@ -94,9 +95,9 @@ test.describe('iPhone 15 DingTalk micro-app', () => {
     const errors = watchBrowserErrors(page)
     await page.route('**/api/v1/auth/dingtalk-login', route => route.fulfill({ json: { success: true, data: { userId: 'streamer01', nickname: '玲玲', role: 'STREAMER', csrfToken: 'csrf' } } }))
     await mockStreamer(page)
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
     await page.goto('/login')
     expect(await page.evaluate(() => navigator.userAgent)).toContain('DingTalk')
-    await page.getByRole('button', { name: '钉钉免登' }).click()
     await page.waitForURL('**/booking')
     await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
     await attachScreenshot(page, testInfo, 'iphone15-dingtalk-streamer')
@@ -108,9 +109,9 @@ test.describe('iPhone 15 DingTalk micro-app', () => {
     const errors = watchBrowserErrors(page)
     await page.route('**/api/v1/auth/dingtalk-login', route => route.fulfill({ json: { success: true, data: { userId: 'operator01', nickname: '运营一号', role: 'OPERATOR', canCreateAppointments: true, csrfToken: 'csrf' } } }))
     await mockAdmin(page)
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
     await page.goto('/login')
-    await page.getByRole('button', { name: '钉钉免登' }).click()
-    await page.waitForURL('**/admin')
+    await page.waitForURL('**/admin?tab=appointments')
     await expect(page.getByRole('navigation', { name: '预约日期' })).toBeVisible()
     await expectIPhonePage(page, errors)
   })
@@ -118,12 +119,10 @@ test.describe('iPhone 15 DingTalk micro-app', () => {
   test('shows a clear message when DingTalk rejects authorization', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'iphone15-dingtalk', 'DingTalk-only scenario')
     const errors = watchBrowserErrors(page)
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
+    await page.route('**/api/v1/auth/dingtalk-login', route => route.fulfill({ status: 500, json: { success: false, error: { code: 'DINGTALK_AUTH_FAILED', message: '授权失败' } } }))
     await page.goto('/login')
-    await page.evaluate(() => {
-      window.dd = { requestAuthCode: options => options.fail(new Error('user denied')) }
-    })
-    await page.getByRole('button', { name: '钉钉免登' }).click()
-    await expect(page.locator('.app-toast-error')).toContainText('钉钉免登失败，请重试')
+    await expect(page.locator('.app-toast-error')).toContainText('免登异常，请联系管理员')
     await attachScreenshot(page, testInfo, 'iphone15-dingtalk-auth-failure')
     await expectIPhonePage(page, errors)
   })

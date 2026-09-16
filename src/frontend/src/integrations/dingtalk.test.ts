@@ -6,7 +6,7 @@ const sdk = vi.hoisted(() => ({
 }))
 vi.mock('dingtalk-jsapi', () => sdk)
 
-import { missingAuthCodeMessage, requestDingTalkAuthCode } from './dingtalk'
+import { requestDingTalkAuthCode } from './dingtalk'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -52,11 +52,6 @@ describe('requestDingTalkAuthCode', () => {
       clientId: 'client-public',
       corpId: 'corp-public',
     })
-  })
-
-  it('formats the missing auth code diagnostic with time and corp id', () => {
-    expect(missingAuthCodeMessage('corp-public', new Date(2026, 8, 14, 9, 8, 7)))
-      .toBe('09:08:07 未获取到免登码:corp-public')
   })
 
   it('does not retry when an injected JSAPI fails', async () => {

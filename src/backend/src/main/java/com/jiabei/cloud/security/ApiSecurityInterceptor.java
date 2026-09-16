@@ -27,7 +27,7 @@ public class ApiSecurityInterceptor implements HandlerInterceptor {
    */
   @Override public boolean preHandle(HttpServletRequest request,HttpServletResponse response,Object handler){
     if(!(handler instanceof HandlerMethod))return true;
-    String path=request.getRequestURI();CurrentUser user=sessions.require(request);request.setAttribute("currentUser",user);
+    String path=request.getRequestURI();CurrentUser user=sessions.require(request,response);request.setAttribute("currentUser",user);
     boolean write=!"GET".equals(request.getMethod())&&!"HEAD".equals(request.getMethod());
     if(write){String origin=request.getHeader("Origin");if(origin!=null&&Arrays.stream(origins).map(String::trim).noneMatch(origin::equals))throw new BusinessException(HttpStatus.FORBIDDEN,"ORIGIN_NOT_ALLOWED","请求来源不受信任。");String csrf=request.getHeader("X-CSRF-Token");if(csrf==null||!csrf.equals(user.csrfToken()))throw new BusinessException(HttpStatus.FORBIDDEN,"CSRF_INVALID","安全校验失败，请刷新页面后重试。");}
     if(!user.isAdministrator()&&!path.equals("/api/v1/me")&&!path.equals("/api/v1/logout")&&!systemEnabled())throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE,"SYSTEM_DISABLED","预约暂未开放。");

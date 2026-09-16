@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,6 +70,17 @@ class CardMockExternalIT {
   @Test void successfulDeliveryIsRecordedOnlyAfterGatewaySuccess(){assertThat(jdbc.queryForObject("SELECT first_delivered_at FROM daily_card WHERE out_track_id=?",java.time.OffsetDateTime.class,CARD_OUT_TRACK_ID)).isNull();worker.poll();assertThat(jdbc.queryForObject("SELECT first_delivered_at FROM daily_card WHERE out_track_id=?",java.time.OffsetDateTime.class,CARD_OUT_TRACK_ID)).isNotNull();}
   @Test void replacementPreservesSuccessfulDeliveryHistory(){worker.poll();java.time.OffsetDateTime first=jdbc.queryForObject("SELECT first_delivered_at FROM daily_card WHERE out_track_id=?",java.time.OffsetDateTime.class,CARD_OUT_TRACK_ID);jdbc.update("INSERT INTO integration_job(id,job_type,business_key,status,max_attempts) VALUES (?,'CARD_REFRESH',?,'PENDING',5)",UUID.randomUUID(),key());jdbc.update("UPDATE daily_card SET content_version=content_version+1 WHERE out_track_id=?",CARD_OUT_TRACK_ID);jdbc.update("UPDATE mock_fault_setting SET enabled=true,remaining_count=1 WHERE fault_key='CARD_DELETED'");worker.poll();Map<String,Object> row=jdbc.queryForMap("SELECT out_track_id,delivered_version FROM daily_card WHERE business_date=current_date AND group_open_conversation_id=?",CARD_GROUP_ID);java.time.OffsetDateTime preserved=jdbc.queryForObject("SELECT first_delivered_at FROM daily_card WHERE business_date=current_date AND group_open_conversation_id=?",java.time.OffsetDateTime.class,CARD_GROUP_ID);assertThat(preserved).isEqualTo(first);assertThat(row.get("out_track_id")).isNotEqualTo(CARD_OUT_TRACK_ID);assertThat(row.get("delivered_version")).isEqualTo(0L);}
   @Test void superAdminRecoveryLoginRequiresPasswordChange(){PasswordService passwords=new PasswordService();SessionService sessions=new SessionService(jdbc,passwords,8,false);CurrentUser user=sessions.loginByPassword("superadmin","superadmin",new MockHttpServletResponse(),"recovery-it");assertThat(user.mustChangePassword()).isTrue();}
+  @Test void databaseSessionSurvivesServiceRestartAndRenewsCookie(){
+    PasswordService passwords=new PasswordService();MockHttpServletResponse loginResponse=new MockHttpServletResponse();
+    new SessionService(jdbc,passwords,8,false).loginByPassword("superadmin","superadmin",loginResponse,"persistent-session-it");
+    jakarta.servlet.http.Cookie loginCookie=loginResponse.getCookie("JBY_SESSION");assertThat(loginCookie).isNotNull();
+    MockHttpServletRequest request=new MockHttpServletRequest();request.setCookies(loginCookie);MockHttpServletResponse renewedResponse=new MockHttpServletResponse();
+    CurrentUser restored=new SessionService(jdbc,passwords,8,false).require(request,renewedResponse);
+    assertThat(restored.loginId()).isEqualTo("superadmin");assertThat(renewedResponse.getCookie("JBY_SESSION").getMaxAge()).isEqualTo(8*60*60);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM auth_session",Integer.class)).isEqualTo(1);
+    MockHttpServletResponse logoutResponse=new MockHttpServletResponse();new SessionService(jdbc,passwords,8,false).logout(request,logoutResponse);
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM auth_session",Integer.class)).isZero();assertThat(logoutResponse.getCookie("JBY_SESSION").getMaxAge()).isZero();
+  }
   @Test void passwordChangeCommitsTogetherWithAudit(){UUID id=jdbc.queryForObject("SELECT id FROM app_user WHERE username='superadmin'",UUID.class);PasswordService passwords=new PasswordService();SessionService sessions=new SessionService(jdbc,passwords,8,false);CurrentUser actor=new CurrentUser(id,"superadmin","admin01","超级管理员",CurrentUser.Role.SUPER_ADMIN,null,true,true,true,true,"csrf");sessions.changePassword(actor,"superadmin","newpass12","password-it");Map<String,Object> user=jdbc.queryForMap("SELECT password_hash,must_change_password FROM app_user WHERE id=?",id);assertThat(passwords.matches("newpass12",(String)user.get("password_hash"))).isTrue();assertThat(user.get("must_change_password")).isEqualTo(true);assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_log WHERE action='PASSWORD_CHANGED' AND trace_id='password-it'",Integer.class)).isEqualTo(1);}
   private void seedCard(){jdbc.update("INSERT INTO daily_card(id,business_date,group_open_conversation_id,out_track_id,template_id,status,content_version) VALUES (?,current_date,?,?,'mock-schedule-template','PENDING',1)",UUID.randomUUID(),CARD_GROUP_ID,CARD_OUT_TRACK_ID);jdbc.update("INSERT INTO integration_job(id,job_type,business_key,status,max_attempts,next_attempt_at) VALUES (?,'CARD_REFRESH',?,'PENDING',5,now()-interval '1 day')",UUID.randomUUID(),key());}
   private String key(){return CARD_GROUP_ID+"|"+LocalDate.now();}

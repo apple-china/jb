@@ -26,6 +26,7 @@ async function mockAdmin(page:any,role='SUPER_ADMIN'){
 }
 
 test('login labels and DingTalk outside-client warning',async({page})=>{
+  await page.route('**/api/v1/me',r=>r.fulfill({status:401,json:{success:false,error:{code:'UNAUTHORIZED',message:'未登录'}}}))
   await page.goto('/login')
   await expect(page.getByText('化妆师',{exact:true})).toBeVisible()
   await expect(page.getByRole('heading',{name:'登录',exact:true})).toBeVisible()
@@ -33,7 +34,43 @@ test('login labels and DingTalk outside-client warning',async({page})=>{
   await inputs.nth(0).fill('12345');await inputs.nth(1).fill('123456');await expect(login).toBeDisabled()
   await inputs.nth(0).fill(' 123456 ');await expect(login).toBeEnabled()
   await page.getByRole('button',{name:'钉钉免登'}).click()
-  await expect(page.locator('.app-toast-warning')).toContainText('请在钉钉内打开后使用免登')
+  await expect(page.locator('.app-toast-error')).toContainText('免登异常，请联系管理员')
+})
+
+test('root resolves by role and admin tab survives refresh',async({page})=>{
+  await mockAdmin(page)
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/admin\?tab=appointments$/)
+  await page.locator('button:visible').filter({hasText:/^设置$/}).click()
+  await expect(page).toHaveURL(/tab=settings/)
+  await expect(page.getByRole('heading',{name:'系统入口'})).toBeVisible()
+  await page.reload()
+  await expect(page).toHaveURL(/tab=settings/)
+  await expect(page.getByRole('heading',{name:'系统入口'})).toBeVisible()
+})
+
+test('password form submits with Enter',async({page})=>{
+  await mockAdmin(page)
+  await page.route('**/api/v1/me',r=>r.fulfill({status:401,json:{success:false,error:{code:'UNAUTHORIZED',message:'未登录'}}}))
+  await page.route('**/api/v1/auth/password-login',r=>r.fulfill({json:{success:true,data:{userId:'u1',nickname:'Admin',role:'SUPER_ADMIN',canModifyAppointments:true,canCancelAppointments:true,canCreateAppointments:true,csrfToken:'csrf'}}}))
+  await page.goto('/login')
+  const inputs=page.locator('.password-login input')
+  await inputs.nth(0).fill('admin01');await inputs.nth(1).fill('secret12');await inputs.nth(1).press('Enter')
+  await expect(page).toHaveURL(/\/admin\?tab=appointments$/)
+})
+
+test('login controls and compact admin header fit 320 to 430 pixels',async({page})=>{
+  await page.route('**/api/v1/me',r=>r.fulfill({status:401,json:{success:false,error:{code:'UNAUTHORIZED',message:'未登录'}}}))
+  await page.goto('/login')
+  for(const width of [320,390,430]){
+    await page.setViewportSize({width,height:820})
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true)
+    const eye=await page.getByRole('button',{name:'显示密码'}).boundingBox()
+    expect(eye?.width).toBe(44);expect(eye?.height).toBe(44)
+  }
+  await mockAdmin(page);await page.goto('/admin?tab=appointments');await page.setViewportSize({width:430,height:820})
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true)
+  expect(await page.locator('.admin-sidebar').evaluate(element=>Math.round(element.getBoundingClientRect().height))).toBe(56)
 })
 
 test('streamer schedule, premium appointment and avatar logout',async({page})=>{
@@ -78,8 +115,12 @@ test('administrator range filtering, total, pagination, export and send-card pic
   await expect(page.getByRole('button',{name:'上一页'})).toBeDisabled()
   await expect(page.getByRole('button',{name:'下一页'})).toBeEnabled()
   if((page.viewportSize()?.width??0)<=720)await expect(page.locator('.mobile-record-date').first()).toHaveText('09-07')
-  const download=page.waitForEvent('download')
   await page.getByRole('button',{name:'导出预约数据'}).click()
+  const exportSheet=page.getByRole('dialog',{name:'确认导出预约数据'})
+  await expect(exportSheet).toContainText('时间区间')
+  await expect(exportSheet).toContainText('全部')
+  const download=page.waitForEvent('download')
+  await exportSheet.getByRole('button',{name:'确认导出'}).click()
   expect((await download).suggestedFilename()).toBe('records.xlsx')
   await page.getByRole('button',{name:'发送钉钉群卡片'}).click()
   const sheet=page.getByRole('dialog',{name:'钉钉群卡片'})

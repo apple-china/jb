@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { BookOpen, CalendarPlus, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ImagePlus, KeyRound, Plus, RotateCcw, Send, Settings2, UserCog, UsersRound, X } from 'lucide-vue-next'
 import AppDatePicker from '../components/AppDatePicker.vue'
 import BrandMark from '../components/BrandMark.vue'
@@ -17,8 +17,10 @@ import type { Appointment, CurrentUser, MakeupArtist, Team } from '../types'
 import { avatarInitial } from '../utils/display'
 import { dateRangePreset, type RangePreset } from '../utils/dateRanges'
 import { formatLastSeen } from '../utils/lastSeen'
+import { restoreSession, signOut } from '../auth'
 
 const router = useRouter()
+const route = useRoute()
 const { toast, showToast, showApiError } = useAppToast()
 const mockLoginEnabled = import.meta.env.VITE_ENABLE_MOCK_LOGIN !== 'false' && import.meta.env.MODE !== 'production'
 const user = ref<CurrentUser | null>(null)
@@ -37,6 +39,8 @@ const filterDate = ref(today)
 const filterOpen = ref(false)
 const filterApplied = ref(false)
 const filters = ref({ streamer: '', makeupArtist: '', attendanceStatus: '', status: '' })
+const appliedFilters = ref({ streamer: '', makeupArtist: '', attendanceStatus: '', status: '' })
+const appliedRange = ref({ startDate: today, endDate: today })
 const page = ref(1)
 const pageSize = ref(30)
 const total = ref(0)
@@ -50,6 +54,8 @@ const cardDate = ref<'today' | 'tomorrow' | null>('today')
 const cardStatuses = ref<Array<{key:'today'|'tomorrow';bookingDate:string;hasSuccessfulDelivery:boolean;firstDeliveredAt?:string}>>([])
 const cardStatusLoading = ref(false)
 const cardSending = ref(false)
+const exportOpen = ref(false)
+const exporting = ref(false)
 const dateMode = ref<'today' | 'tomorrow' | null>('today')
 const createSlots = ref<Array<{time:string;available:boolean;reason?:string}>>([])
 const createForm = ref({ streamerUserId: '', makeupArtistId: '', teamId: '', startTime: '', reason: '' })
@@ -86,6 +92,13 @@ const appointmentDates = computed(() => [{ label: '今天', value: shanghaiDate(
 const selectedCardStatus = computed(() => cardStatuses.value.find(item => item.key === cardDate.value))
 const cardWasDelivered = computed(() => !!selectedCardStatus.value?.hasSuccessfulDelivery)
 const cardSubmitDisabled = computed(() => !cardDate.value || cardStatusLoading.value || cardSending.value)
+const exportSummary = computed(() => ({
+  date: historical.value && filterApplied.value ? `${appliedRange.value.startDate} 至 ${appliedRange.value.endDate}` : filterDate.value,
+  streamer: streamerOptions.value.find(item => item.value === (filterApplied.value ? appliedFilters.value.streamer : ''))?.label ?? '全部',
+  makeupArtist: allMakeupArtistOptions.value.find(item => item.value === (filterApplied.value ? appliedFilters.value.makeupArtist : ''))?.label ?? '全部',
+  attendance: attendanceOptions.find(item => item.value === (filterApplied.value ? appliedFilters.value.attendanceStatus : ''))?.label ?? '全部',
+  status: statusOptions.find(item => item.value === (filterApplied.value ? appliedFilters.value.status : ''))?.label ?? '全部',
+}))
 const timeOptions = computed(() => {
   const artistId = user.value?.role === 'MAKEUP' ? user.value.makeupArtistId : createForm.value.makeupArtistId
   const artist = makeupArtists.value.find(item => item.id === artistId)
@@ -152,8 +165,11 @@ function enabledCount(rows: Array<{ active?: boolean }>) { return rows.filter(ro
 
 async function init() {
   try {
-    user.value = await api.me()
+    user.value = await restoreSession()
     if (user.value.role === 'STREAMER') { await router.replace('/booking'); return }
+    const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : 'appointments'
+    tab.value = requestedTab === 'create' && canCreate.value ? 'create' : requestedTab === 'settings' && user.value.role !== 'MAKEUP' ? 'settings' : 'appointments'
+    if(route.query.tab!==tab.value)await router.replace({query:{...route.query,tab:tab.value}})
     if (user.value.role === 'MAKEUP' && user.value.makeupArtistId) filters.value.makeupArtist = user.value.makeupArtistId
     await Promise.all([loadAppointments(), loadResources()])
   } catch (error) {
@@ -164,12 +180,13 @@ async function init() {
 
 function appointmentParams(exporting = false) {
   const q = new URLSearchParams()
-  if (historical.value && filterApplied.value) { q.set('startDate', range.value.startDate); q.set('endDate', range.value.endDate) }
+  const effectiveFilters = historical.value ? (filterApplied.value ? appliedFilters.value : { streamer:'', makeupArtist:'', attendanceStatus:'', status:'' }) : filters.value
+  if (historical.value && filterApplied.value) { q.set('startDate', appliedRange.value.startDate); q.set('endDate', appliedRange.value.endDate) }
   else q.set('date', filterDate.value)
-  if (filters.value.streamer) q.set('streamer', filters.value.streamer)
-  if (filters.value.makeupArtist) q.set('makeupArtist', filters.value.makeupArtist)
-  if (filters.value.attendanceStatus) q.set('attendanceStatus', filters.value.attendanceStatus)
-  if (filters.value.status) q.set('status', filters.value.status)
+  if (effectiveFilters.streamer) q.set('streamer', effectiveFilters.streamer)
+  if (effectiveFilters.makeupArtist) q.set('makeupArtist', effectiveFilters.makeupArtist)
+  if (effectiveFilters.attendanceStatus) q.set('attendanceStatus', effectiveFilters.attendanceStatus)
+  if (effectiveFilters.status) q.set('status', effectiveFilters.status)
   if (!exporting) { q.set('page', String(page.value)); q.set('size', String(pageSize.value)) }
   return q
 }
@@ -187,16 +204,17 @@ async function loadAppointments() {
 }
 
 function applyPreset(preset: RangePreset) { activePreset.value = preset; range.value = dateRangePreset(preset) }
-async function applyFilters() { filterApplied.value = true; filterOpen.value = false; page.value = 1; await loadAppointments() }
+async function applyFilters() { appliedFilters.value={...filters.value};appliedRange.value={...range.value};filterApplied.value = true; filterOpen.value = false; page.value = 1; await loadAppointments() }
 async function clearFilters() {
   filters.value = { streamer: '', makeupArtist: user.value?.role === 'MAKEUP' ? user.value.makeupArtistId ?? '' : '', attendanceStatus: '', status: '' }
-  range.value = { startDate: filterDate.value, endDate: filterDate.value }; activePreset.value = ''; filterApplied.value = false; filterOpen.value = true; page.value = 1; pageSize.value = 30; await loadAppointments()
+  appliedFilters.value={...filters.value};range.value = { startDate: filterDate.value, endDate: filterDate.value };appliedRange.value={...range.value}; activePreset.value = ''; filterApplied.value = false; filterOpen.value = true; page.value = 1; pageSize.value = 30; await loadAppointments()
 }
 async function changePage(next: number) { page.value = next; await loadAppointments() }
 async function changePageSize() { page.value = 1; await loadAppointments() }
 async function selectAppointmentDate(date: string) { filterDate.value = date; range.value = { startDate: date, endDate: date }; activePreset.value = ''; filterApplied.value = false; filterOpen.value = false; page.value = 1; await loadAppointments() }
 function selectCreateDate(mode: 'today' | 'tomorrow') { dateMode.value = mode }
-function openCreateTab() { dateMode.value = filterApplied.value ? null : filterDate.value === shanghaiDate(1) ? 'tomorrow' : 'today'; createForm.value.startTime = ''; tab.value = 'create'; void loadCreateAvailability() }
+function selectTab(value:'appointments'|'create'|'settings'){tab.value=value;void router.replace({query:{...route.query,tab:value}})}
+function openCreateTab() { dateMode.value = filterApplied.value ? null : filterDate.value === shanghaiDate(1) ? 'tomorrow' : 'today'; createForm.value.startTime = ''; selectTab('create'); void loadCreateAvailability() }
 async function loadCreateAvailability() {
   const artistId = user.value?.role === 'MAKEUP' ? user.value.makeupArtistId : createForm.value.makeupArtistId
   if (!selectedDate.value || !artistId) { createSlots.value = []; createForm.value.startTime = ''; return }
@@ -206,12 +224,14 @@ async function loadCreateAvailability() {
 
 async function exportAppointments() {
   try {
+    exporting.value = true
     const result = await api.exportAppointments(appointmentParams(true))
     const url = URL.createObjectURL(result.blob)
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click()
     URL.revokeObjectURL(url)
-    showToast('预约记录已导出。', 'success')
+    exportOpen.value = false; showToast('预约记录已导出。', 'success')
   } catch (error) { showApiError(error, '导出失败。') }
+  finally { exporting.value = false }
 }
 async function openCardDialog() {
   cardDate.value = filterApplied.value ? null : filterDate.value === shanghaiDate(1) ? 'tomorrow' : 'today'
@@ -389,8 +409,9 @@ async function revokePassword() {
   try { await api.revokeAccountPassword(accountEditor.value.id); revokePasswordOpen.value = false; assignedCredential.value = null; await refreshEditedAccount(); showToast('账号密码已回收。', 'success') }
   catch (error) { showApiError(error, '密码回收失败。') }
 }
-async function logout() { try { await api.logout() } finally { sessionStorage.clear(); await router.replace('/login') } }
+async function logout() { await signOut(); await router.replace('/login') }
 watch([dateMode, () => createForm.value.makeupArtistId], loadCreateAvailability)
+watch(()=>route.query.tab,value=>{if(value==='appointments'||value==='create'||value==='settings')tab.value=value})
 onMounted(init)
 </script>
 
@@ -399,9 +420,9 @@ onMounted(init)
     <aside class="admin-sidebar">
       <BrandMark compact />
       <nav>
-        <button :class="{ active: tab === 'appointments' }" @click="tab = 'appointments'"><CalendarRange />预约</button>
+        <button :class="{ active: tab === 'appointments' }" @click="selectTab('appointments')"><CalendarRange />预约</button>
         <button v-if="canCreate" :class="{ active: tab === 'create' }" @click="openCreateTab"><CalendarPlus />代预约</button>
-        <button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="tab = 'settings'"><Settings2 />设置</button>
+        <button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="selectTab('settings')"><Settings2 />设置</button>
       </nav>
       <div class="admin-user">
         <span>{{ roleLabel(user?.role ?? '') }} · {{ user?.nickname }}</span>
@@ -418,7 +439,7 @@ onMounted(init)
             <div class="record-actions" :class="{ 'limited-actions': !isAdmin }">
               <button v-if="historical" class="record-action" :class="{ active: filterApplied || filterOpen }" aria-label="筛选预约记录" title="筛选" @click="filterOpen = !filterOpen"><SlidersHorizontal :size="17" /><span>筛选</span></button>
               <button class="record-action" aria-label="查看预约规则" title="规则" @click="rulesOpen = true"><BookOpen :size="17" /><span>规则</span></button>
-              <button v-if="isAdmin" class="record-action" aria-label="导出预约数据" title="导出数据" @click="exportAppointments"><Download :size="17" /><span>导出</span></button>
+              <button v-if="isAdmin" class="record-action" aria-label="导出预约数据" title="导出数据" @click="exportOpen = true"><Download :size="17" /><span>导出</span></button>
               <button v-if="isAdmin" class="record-action primary-action" aria-label="发送钉钉群卡片" title="发卡" @click="openCardDialog"><Send :size="16" /><span>发卡</span></button>
             </div>
           </div>
@@ -536,10 +557,11 @@ onMounted(init)
       <template #footer><button class="button primary full" :disabled="!accountCanSave" @click="saveAccount">{{ accountSubmitLabel }}</button></template>
     </AppSheet>
     <AppSheet :open="revokePasswordOpen" title="确认回收密码" @close="revokePasswordOpen = false"><div class="confirm-copy"><div class="warning-icon">!</div><p>回收后仅钉钉登录，账号密码登录需重新分配</p></div><template #footer><div class="two-buttons"><button class="button secondary" @click="revokePasswordOpen = false">暂不回收</button><button class="button danger-solid" @click="revokePassword">确认回收</button></div></template></AppSheet>
+    <AppSheet :open="exportOpen" title="确认导出预约数据" @close="exportOpen = false"><dl class="export-summary"><div><dt>时间区间</dt><dd>{{ exportSummary.date }}</dd></div><div><dt>主播</dt><dd>{{ exportSummary.streamer }}</dd></div><div><dt>化妆师</dt><dd>{{ exportSummary.makeupArtist }}</dd></div><div><dt>签到状态</dt><dd>{{ exportSummary.attendance }}</dd></div><div><dt>预约状态</dt><dd>{{ exportSummary.status }}</dd></div></dl><template #footer><div class="two-buttons"><button class="button secondary" :disabled="exporting" @click="exportOpen = false">取消</button><button class="button primary" :disabled="exporting" @click="exportAppointments">{{ exporting ? '导出中…' : '确认导出' }}</button></div></template></AppSheet>
     <AppSheet :open="cardDateOpen" title="钉钉群卡片" @close="cardDateOpen = false"><div class="card-date-options"><button :class="{ active: cardDate === 'today' }" @click="cardDate = 'today'"><b>今天</b><br />{{ shanghaiDate() }}</button><button :class="{ active: cardDate === 'tomorrow' }" @click="cardDate = 'tomorrow'"><b>明天</b><br />{{ shanghaiDate(1) }}</button></div><template #footer><button class="button full card-submit" :class="{ resend: cardWasDelivered }" :disabled="cardSubmitDisabled" @click="sendCard"><RotateCcw v-if="cardWasDelivered" :size="17" />{{ cardWasDelivered ? '重新发送' : '确认发送' }}</button></template></AppSheet>
     <AppSheet :open="logoutOpen" title="退出登录" @close="logoutOpen = false"><p>确定要退出当前账号吗？</p><template #footer><div class="action-row"><button class="button secondary" @click="logoutOpen = false">取消</button><button class="button danger" @click="logout">退出登录</button></div></template></AppSheet>
     <BookingRulesSheet :open="rulesOpen" :role="user?.role ?? 'OBSERVER'" @close="rulesOpen = false" />
-    <nav v-if="user?.role !== 'MAKEUP' || canCreate" class="admin-bottom" aria-label="管理端导航"><button :class="{ active: tab === 'appointments' }" @click="tab = 'appointments'"><CalendarRange />预约</button><button v-if="canCreate" :class="{ active: tab === 'create' }" @click="openCreateTab"><CalendarPlus />代预约</button><button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="tab = 'settings'"><Settings2 />设置</button></nav>
+    <nav v-if="user?.role !== 'MAKEUP' || canCreate" class="admin-bottom" aria-label="管理端导航"><button :class="{ active: tab === 'appointments' }" @click="selectTab('appointments')"><CalendarRange />预约</button><button v-if="canCreate" :class="{ active: tab === 'create' }" @click="openCreateTab"><CalendarPlus />代预约</button><button v-if="user?.role !== 'MAKEUP'" :class="{ active: tab === 'settings' }" @click="selectTab('settings')"><Settings2 />设置</button></nav>
     <AppToast :message="toast.message" :kind="toast.kind" />
   </main>
 </template>
