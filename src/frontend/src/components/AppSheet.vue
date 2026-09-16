@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { onBeforeUnmount, watch } from 'vue'
 import { X } from 'lucide-vue-next'
-defineProps<{ open: boolean; title: string; subtitle?: string; fullscreen?: boolean }>()
+const props=defineProps<{ open: boolean; title: string; subtitle?: string; fullscreen?: boolean }>()
 defineEmits<{ close: [] }>()
+let previousOverflow=''
+watch(()=>props.open,open=>{if(open){previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden'}else document.body.style.overflow=previousOverflow},{immediate:true})
+onBeforeUnmount(()=>{document.body.style.overflow=previousOverflow})
 </script>
 <template>
   <Teleport to="body">

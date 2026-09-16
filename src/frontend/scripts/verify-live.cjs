@@ -73,7 +73,7 @@ async function main() {
   console.log(JSON.stringify({ result, errors }))
   if (!result.hasDingTalkPanel || result.hasErrorOverlay || errors.length || result.scrollWidth > result.clientWidth ||
       result.toolbarLabels.join(',') !== '筛选,规则,导出,发卡' || !result.filterBelowToolbar ||
-      !result.calendarVisible || !result.filterStillOpenAfterReset || !['确认发送','重新发送'].includes(result.cardSubmitLabel) ||
+      !result.calendarVisible || !result.filterStillOpenAfterReset || !['确认发送','刷新卡片'].includes(result.cardSubmitLabel) ||
       (result.detailSections.length > 0 && result.detailSections.join(',') !== '预约标识,基础信息,操作信息,修改记录,其他数据') ||
       !result.hasAdminRoleSelect ||
       result.sheetResult.scrollWidth > result.sheetResult.clientWidth || !result.sheetResult.bodyCanScroll) process.exitCode = 1

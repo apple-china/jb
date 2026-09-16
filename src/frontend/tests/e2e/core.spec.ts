@@ -128,7 +128,7 @@ test('administrator range filtering, total, pagination, export and send-card pic
   await expect(sheet.getByRole('button',{name:/明天/})).toBeVisible()
   await expect(sheet.getByRole('button',{name:'确认发送'})).toBeEnabled()
   await sheet.getByRole('button',{name:/明天/}).click()
-  await expect(sheet.getByRole('button',{name:'重新发送'})).toBeVisible()
+  await expect(sheet.getByRole('button',{name:'刷新卡片'})).toBeVisible()
 })
 
 test('range mode leaves card and proxy dates unselected until explicitly chosen',async({page})=>{
