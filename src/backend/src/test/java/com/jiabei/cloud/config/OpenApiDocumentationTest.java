@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jiabei.cloud.web.AccountController;
 import com.jiabei.cloud.web.AdminAppointmentController;
+import com.jiabei.cloud.web.AdminAnalyticsController;
 import com.jiabei.cloud.web.AdminResourceController;
 import com.jiabei.cloud.web.AppointmentController;
 import com.jiabei.cloud.web.AuthController;
@@ -29,7 +30,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
  */
 class OpenApiDocumentationTest {
   private static final Class<?>[] CONTROLLERS={
-    AuthController.class,AppointmentController.class,AdminAppointmentController.class,
+    AuthController.class,AppointmentController.class,AdminAppointmentController.class,AdminAnalyticsController.class,
     AdminResourceController.class,AccountController.class,DingTalkAuthController.class,
     DingTalkDirectoryController.class,ImageUploadController.class,
     MoredianRecognitionController.class,MockAuthController.class,MockCardController.class
@@ -39,7 +40,7 @@ class OpenApiDocumentationTest {
   void everyControllerOperationHasCompleteChineseDocumentation(){
     Set<String> actual=controllerOperations();
 
-    assertThat(actual).hasSize(41);
+    assertThat(actual).hasSize(44);
     assertThat(OpenApiDocumentation.documentedOperations()).containsExactlyInAnyOrderElementsOf(actual);
     assertThat(OpenApiDocumentation.incompleteOperations()).isEmpty();
   }

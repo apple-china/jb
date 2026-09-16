@@ -62,6 +62,15 @@ public class BookingService {
     return availability(actor,date,makeupArtistId,null);
   }
 
+  public Map<String,Object> streamerAvailability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID appointmentId){
+    requireStreamer(actor);
+    if(appointmentId==null)return availability(actor,date,makeupArtistId,null);
+    Appointment appointment=appointment(appointmentId);
+    if(!appointment.streamerId().equals(actor.id()))throw BusinessException.forbidden();
+    if(!appointment.date().equals(date))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"BOOKING_DATE_IMMUTABLE","预约日期不可修改。");
+    return availability(actor,date,makeupArtistId,appointmentId);
+  }
+
   private Map<String,Object> availability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID excludeAppointmentId){
     policy.validateDate(date,LocalDate.now(clock));MakeupArtist makeupArtist=makeupArtist(makeupArtistId);List<Map<String,Object>> slots=new ArrayList<>();boolean conflictAllowed=actor.isAdministrator()||actor.role()==CurrentUser.Role.MAKEUP;
     LocalTime first=makeupArtist.scheduleEnabled()?makeupArtist.workStart():LocalTime.MIDNIGHT;

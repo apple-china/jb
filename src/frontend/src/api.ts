@@ -46,7 +46,7 @@ export const api = {
   changePassword:(currentPassword:string,newPassword:string)=>request<void>('/auth/change-password',{method:'POST',body:JSON.stringify({currentPassword,newPassword})}),
   logout: () => request<void>('/logout', { method: 'POST' }),
   bookingContext: (date?: string) => request<BookingContext>(`/booking-context${date ? `?date=${date}` : ''}`),
-  availability: (date: string, makeupArtistId: string) => request<{ slots: Array<{ time: string; available: boolean; conflict?:boolean; reason?: string }>;conflictAllowed:boolean }>(`/availability?date=${date}&makeupArtistId=${makeupArtistId}`),
+  availability: (date: string, makeupArtistId: string, appointmentId?: string) => request<{ slots: Array<{ time: string; available: boolean; conflict?:boolean; reason?: string }>;conflictAllowed:boolean }>(`/availability?date=${date}&makeupArtistId=${makeupArtistId}${appointmentId?`&appointmentId=${appointmentId}`:''}`),
   createAppointment: (body: object) => request('/appointments', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
   cancelAppointment: (id: string, version: number) => request(`/appointments/${id}/cancel`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ version }) }),
   modifyAppointment:(id:string,body:object)=>request(`/appointments/${id}`,{method:'PATCH',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify(body)}),

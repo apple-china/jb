@@ -11,10 +11,10 @@ import PolishedSelect from '../components/PolishedSelect.vue'
 import TimeText from '../components/TimeText.vue'
 import TimeWheel from '../components/TimeWheel.vue'
 import { useAppToast } from '../composables/useAppToast'
-import { avatarInitial } from '../utils/display'
 import { api, ApiError } from '../api'
 import type { BookingContext, CurrentUser } from '../types'
 import { restoreSession, signOut } from '../auth'
+import streamerAvatar from '../../../../assets/主播.png'
 
 const router = useRouter()
 const user = ref<CurrentUser | null>(null)
@@ -88,7 +88,7 @@ async function loadSlots() {
   const previous=startTime.value;startTime.value = ''
   if (!makeupArtistId.value) { slots.value = []; return }
   try {
-    slots.value = (await api.availability(selectedDate.value, makeupArtistId.value)).slots
+    slots.value = (await api.availability(selectedDate.value, makeupArtistId.value, bookingMode.value==='modify'?context.value?.myAppointment?.id:undefined)).slots
     const preferred = bookingMode.value==='modify'?previous:context.value?.defaults.startTime
     if (preferred && slots.value.some(s => s.time === preferred && s.available)) startTime.value = preferred
   } catch(e){ showApiError(e,'可用时间加载失败。') }
@@ -120,7 +120,7 @@ onMounted(initialize)
   <main class="mobile-app">
     <header class="mobile-header">
       <BrandMark compact />
-      <div class="header-identity"><span>{{ greeting }}，{{ user?.nickname }}</span><button class="avatar avatar-streamer" aria-label="打开账号菜单" @click="logoutOpen=true">{{ avatarInitial(user?.nickname) }}</button></div>
+      <div class="header-identity"><span>{{ greeting }}，{{ user?.nickname }}</span><button class="avatar avatar-streamer" aria-label="打开账号菜单" @click="logoutOpen=true"><img :src="streamerAvatar" alt="" /></button></div>
     </header>
 
     <div v-if="loading" class="loading-state"><span></span><span></span><span></span></div>
@@ -132,8 +132,8 @@ onMounted(initialize)
         <div class="section-heading"><div><span class="eyebrow">MY APPOINTMENT</span><h2>我的预约</h2></div></div>
         <article v-if="context.myAppointment" class="appointment-card" :class="context.myAppointment.status.toLowerCase()">
           <div class="appointment-time"><Clock3 :size="19" /><strong><TimeText :value="context.myAppointment.startTime" /></strong><span class="attendance-badge" :class="context.myAppointment.attendanceStatus.toLowerCase()">{{ attendanceLabel(context.myAppointment.attendanceStatus) }}</span></div>
-          <dl class="appointment-details"><div><dt>化妆师</dt><dd>{{ context.myAppointment.makeupArtistName }}</dd></div><div><dt>所属团队</dt><dd>{{ context.myAppointment.teamName }}</dd></div></dl>
-          <div v-if="context.writeEnabled" class="appointment-actions"><button class="appointment-action modify" @click="openBooking('modify')"><Pencil :size="16" />修改</button><button class="appointment-action cancel" @click="cancelOpen=true"><X :size="17" />取消</button></div>
+          <dl class="appointment-details"><div><dt>化妆师</dt><dd>{{ context.myAppointment.makeupArtistName }}</dd></div><div><dt>团播组</dt><dd>{{ context.myAppointment.teamName }}</dd></div></dl>
+          <div v-if="context.writeEnabled" class="appointment-actions"><button v-if="context.myAppointment.attendanceStatus !== 'LATE'" class="appointment-action modify" @click="openBooking('modify')"><Pencil :size="16" />修改</button><button class="appointment-action cancel" @click="cancelOpen=true"><X :size="17" />取消</button></div>
         </article>
         <article v-else class="empty-card"><CalendarDays :size="26" /><p>{{ emptyText }}</p></article>
       </section>
@@ -154,7 +154,7 @@ onMounted(initialize)
     <AppSheet :open="bookingOpen" :title="bookingTitle" @close="bookingOpen=false">
       <div class="form-stack">
         <label><span>化妆师</span><PolishedSelect v-model="makeupArtistId" :options="makeupArtistOptions" placeholder="请选择化妆师" aria-label="化妆师" @change="loadSlots"><template #leading><Sparkles :size="18"/></template></PolishedSelect></label>
-        <label><span>团队</span><PolishedSelect v-model="teamId" :options="teamOptions" placeholder="请选择团队" aria-label="团队"><template #leading><UsersRound :size="18"/></template></PolishedSelect></label>
+        <label><span>团播组</span><PolishedSelect v-model="teamId" :options="teamOptions" placeholder="请选择团播组" aria-label="团播组"><template #leading><UsersRound :size="18"/></template></PolishedSelect></label>
         <div><span class="field-label">时间</span><TimeWheel v-if="makeupArtistId&&slots.length" v-model="startTime" :slots="slots"/><p v-else class="field-hint time-wheel-empty">选择化妆师后即可查看可预约时间</p></div>
         <p v-if="context?.defaults.message" class="field-hint">{{ context.defaults.message }}</p>
       </div>

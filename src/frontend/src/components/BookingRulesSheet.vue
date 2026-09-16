@@ -19,7 +19,7 @@ defineEmits<{close:[]}>()
       </template>
       <template v-if="role==='MAKEUP'">
         <article><b>主播预约</b><p>主播预约须至少提前 20 分钟，并遵守修改和取消次数限制。</p></article>
-        <article><b>化妆师代预约</b><p>仅能使用本人资源代预约；人员、团队与时段须启用并符合当日排班。</p></article>
+        <article><b>化妆师代预约</b><p>仅能使用本人资源代预约；人员、团播组与时段须启用并符合当日排班。</p></article>
         <article><b>冲突处理</b><p>操作至少提前 1 分钟。重叠时段需查看提示并二次确认。</p></article>
       </template>
     </div>
