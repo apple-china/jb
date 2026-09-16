@@ -16,6 +16,7 @@ Desktop.ini
 # Node, Vite and frontend test output
 node_modules/
 .pnpm-store/
+/package-lock.json
 dist/
 coverage/
 playwright-report/
@@ -46,3 +47,7 @@ downloads/
 # TypeScript-generated copies of the Vite config
 vite.config.js
 vite.config.d.ts
+vite.config.*.timestamp-*.mjs
+
+# Local agent/workflow scratch data
+.superpowers/

@@ -1,0 +1,74 @@
+name: 部署 main 到钉钉测试环境
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jiabei-main-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 上传并重新部署
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 获取 main 代码
+        uses: actions/checkout@v4
+
+      - name: 配置 SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: 上传代码并保留服务器配置
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude '.tools/' \
+            --exclude '.runtime/' \
+            --exclude 'uploads/' \
+            --exclude 'downloads/' \
+            -e "ssh -p $DEPLOY_PORT" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei/"
+
+      - name: 构建并启动服务
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -eu
+            cd /opt/stacks/jiabei
+            test -s .env.dingtalk-test
+            docker compose \
+              --env-file .env.dingtalk-test \
+              -f docker-compose.yml \
+              -f docker-compose.dingtalk-test.yml \
+              up -d --build --remove-orphans
+            docker compose \
+              --env-file .env.dingtalk-test \
+              -f docker-compose.yml \
+              -f docker-compose.dingtalk-test.yml \
+              ps
+          '
