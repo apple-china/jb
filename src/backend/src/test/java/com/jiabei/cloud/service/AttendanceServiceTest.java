@@ -42,6 +42,33 @@ class AttendanceServiceTest {
 
     assertThat(jdbc.arguments[1]).isEqualTo(start.minusMinutes(120).toOffsetDateTime());
     assertThat(jdbc.arguments[2]).isEqualTo(start.plusMinutes(10).toOffsetDateTime());
+    assertThat(jdbc.arguments[4]).isEqualTo(appointment.id());
+    assertThat(jdbc.sql).contains("bound.status='ACTIVE'")
+        .contains("bound.id<>?")
+        .contains("FOR UPDATE OF g SKIP LOCKED");
+  }
+
+  @Test
+  void matchesOnlyTheClosestAppointmentByTimestampWhenAnEventIsIngested() {
+    IngestJdbcTemplate jdbc = new IngestJdbcTemplate();
+    BookingProperties properties = new BookingProperties(
+        ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
+    AttendanceService service = new AttendanceService(
+        jdbc, new BookingPolicy(properties), properties, Clock.system(ZONE), new ObjectMapper());
+    ZonedDateTime occurredAt = ZonedDateTime.of(2026, 9, 15, 19, 0, 0, 0, ZONE);
+
+    assertThat(service.ingest("event-1", "org", "device", "ding-user-1", occurredAt, "{}", "trace")).isTrue();
+
+    assertThat(jdbc.candidateSql).doesNotContain("booking_date")
+        .contains("a.start_at>?")
+        .contains("a.start_at<?")
+        .contains("ORDER BY CASE WHEN a.start_at<=? THEN 0 ELSE 1 END")
+        .contains("abs(extract(epoch")
+        .contains("LIMIT 1 FOR UPDATE OF a SKIP LOCKED");
+    assertThat(jdbc.candidateArguments[2]).isEqualTo(occurredAt.minusMinutes(10).toOffsetDateTime());
+    assertThat(jdbc.candidateArguments[3]).isEqualTo(occurredAt.plusMinutes(120).toOffsetDateTime());
+    assertThat(jdbc.candidateArguments[4]).isEqualTo(occurredAt.toOffsetDateTime());
+    assertThat(jdbc.candidateArguments[5]).isEqualTo(occurredAt.toOffsetDateTime());
   }
 
   @Test
@@ -77,6 +104,18 @@ class AttendanceServiceTest {
     verify(cards).refreshExistingWindow();
   }
 
+  private static final class IngestJdbcTemplate extends JdbcTemplate {
+    private String candidateSql;
+    private Object[] candidateArguments;
+
+    @Override public int update(String sql, Object... args) { return 1; }
+    @Override public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+      candidateSql = sql;
+      candidateArguments = args;
+      return List.of();
+    }
+  }
+
   private static final class SchedulerJdbcTemplate extends JdbcTemplate {
     private String pastRefreshSql;
     private Object[] pastRefreshArguments;
@@ -92,10 +131,12 @@ class AttendanceServiceTest {
   }
 
   private static final class CapturingJdbcTemplate extends JdbcTemplate {
+    private String sql;
     private Object[] arguments;
 
     @Override
     public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+      this.sql = sql;
       arguments = args;
       return List.of();
     }
