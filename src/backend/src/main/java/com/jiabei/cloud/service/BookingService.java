@@ -57,16 +57,45 @@ public class BookingService {
    * 但只有具备覆盖权限的角色可以提交冲突预约。</p>
    */
   public Map<String,Object> availability(CurrentUser actor,LocalDate date,UUID makeupArtistId){
+    return availability(actor,date,makeupArtistId,null);
+  }
+
+  private Map<String,Object> availability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID excludeAppointmentId){
     policy.validateDate(date,LocalDate.now(clock));MakeupArtist makeupArtist=makeupArtist(makeupArtistId);List<Map<String,Object>> slots=new ArrayList<>();boolean conflictAllowed=actor.isAdministrator()||actor.role()==CurrentUser.Role.MAKEUP;
     LocalTime first=makeupArtist.scheduleEnabled()?makeupArtist.workStart():LocalTime.MIDNIGHT;
     int slotCount=makeupArtist.scheduleEnabled()?(int)(java.time.Duration.between(first,makeupArtist.workEnd()).toMinutes()-props.serviceDurationMinutes())/props.timeStepMinutes()+1:24*60/props.timeStepMinutes();
     for(int index=0;index<slotCount;index++){LocalTime t=first.plusMinutes((long)index*props.timeStepMinutes());
       ZonedDateTime start=policy.start(date,t);String reason=null;boolean conflict=false;
       try{policy.validateMakeupArtist(date,t,makeupArtist.workDays(),makeupArtist.workStart(),makeupArtist.workEnd(),makeupArtist.scheduleEnabled(),makeupArtist.active(),makeupArtist.attending());if(actor.isStreamer())policy.validateStreamerLead(ZonedDateTime.now(clock),start);else policy.validateAdminLead(ZonedDateTime.now(clock),start);}catch(BusinessException e){reason=e.getMessage();}
-      if(reason==null){conflict=overlap(makeupArtistId,start,start.plusMinutes(props.serviceDurationMinutes()),null);if(conflict&&!conflictAllowed)reason="该时段已占用";}
+      if(reason==null){conflict=overlap(makeupArtistId,start,start.plusMinutes(props.serviceDurationMinutes()),excludeAppointmentId);if(conflict&&!conflictAllowed)reason="该时段已占用";}
       Map<String,Object> slot=new LinkedHashMap<>();slot.put("time",t.toString());slot.put("available",reason==null);slot.put("conflict",conflict);slot.put("reason",reason);slots.add(slot);
     }
     return Map.of("slots",slots,"conflictAllowed",conflictAllowed);
+  }
+
+  public Map<String,Object> adminAvailability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID appointmentId){
+    requireProxyActor(actor);
+    if(appointmentId!=null){Map<String,Object> appointment=jdbc.queryForMap("SELECT booking_date,makeup_artist_id FROM appointment WHERE id=?",appointmentId);if(actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(appointment.get("makeup_artist_id")))throw BusinessException.forbidden();if(!date.equals(appointment.get("booking_date")))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"BOOKING_DATE_IMMUTABLE","预约日期不可修改。");}
+    return availability(actor,date,makeupArtistId,appointmentId);
+  }
+
+  public Map<String,Object> adminBookingOptions(CurrentUser actor,LocalDate date,UUID appointmentId){
+    requireProxyActor(actor);policy.validateDate(date,LocalDate.now(clock));
+    List<Map<String,Object>> streamers=jdbc.query("""
+      SELECT coalesce(u.dingtalk_user_id,u.username),u.nickname FROM app_user u
+      WHERE u.role='STREAMER' AND u.is_active AND u.is_attending
+        AND NOT EXISTS (SELECT 1 FROM appointment a WHERE a.streamer_user_id=u.id AND a.booking_date=? AND a.status='ACTIVE')
+      ORDER BY u.nickname
+      """,(rs,n)->Map.of("userId",rs.getString(1),"nickname",rs.getString(2)),date);
+    List<Map<String,Object>> artists=jdbc.query("SELECT id,name,avatar_url,work_days,work_start,work_end,schedule_enabled FROM makeup_artist WHERE is_active AND is_attending ORDER BY name",(rs,n)->{Map<String,Object> m=new LinkedHashMap<>();m.put("id",rs.getObject(1,UUID.class));m.put("name",rs.getString(2));m.put("avatarUrl",Objects.toString(rs.getString(3),""));m.put("workDays",rs.getString(4));m.put("workStart",rs.getObject(5,LocalTime.class));m.put("workEnd",rs.getObject(6,LocalTime.class));m.put("scheduleEnabled",rs.getBoolean(7));return m;});
+    artists.removeIf(item->actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(item.get("id"))||((List<?>)availability(actor,date,(UUID)item.get("id"),appointmentId).get("slots")).stream().noneMatch(slot->Boolean.TRUE.equals(((Map<?,?>)slot).get("available"))));
+    List<Map<String,Object>> teams=jdbc.query("SELECT id,name,logo_url FROM team WHERE is_active ORDER BY name",(rs,n)->Map.of("id",rs.getObject(1,UUID.class),"name",rs.getString(2),"logoUrl",Objects.toString(rs.getString(3),"")));
+    return Map.of("streamers",streamers,"makeupArtists",artists,"teams",teams);
+  }
+
+  private void requireProxyActor(CurrentUser actor){
+    if(actor.role()==CurrentUser.Role.OBSERVER||actor.isStreamer())throw BusinessException.forbidden();
+    if((actor.role()==CurrentUser.Role.MAKEUP||actor.role()==CurrentUser.Role.OPERATOR)&&!actor.mayCreateAppointments()&&!actor.mayModifyAppointments())throw BusinessException.forbidden();
   }
 
   @Transactional
@@ -114,8 +143,8 @@ public class BookingService {
     Appointment a=appointment(id);if(actor.role()==CurrentUser.Role.MAKEUP&&!a.makeupArtistId().equals(actor.makeupArtistId()))throw BusinessException.forbidden();
     List<Map<String,Object>> rows=jdbc.query("SELECT a.*,coalesce(u.dingtalk_user_id,u.username,u.id::text) identity,(SELECT count(*) FROM appointment p WHERE p.booking_date=a.booking_date AND (p.created_at<a.created_at OR (p.created_at=a.created_at AND p.id<=a.id))) daily_sequence FROM appointment a JOIN app_user u ON u.id=a.streamer_user_id WHERE a.id=?",this::appointmentMap,id);
     Map<String,Object> m=new LinkedHashMap<>(rows.stream().findFirst().orElseThrow());
-    Map<String,Object> metadata=jdbc.queryForMap("SELECT a.source,a.created_at,a.cancelled_at,a.cancel_reason,coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,canceller.nickname cancelled_by_name FROM appointment a LEFT JOIN app_user creator ON creator.id=a.created_by_user_id LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id LEFT JOIN LATERAL (SELECT actor_name_snapshot FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE' ORDER BY created_at LIMIT 1) create_audit ON true WHERE a.id=?",id);
-    m.put("source",metadata.get("source"));m.put("createdAt",metadata.get("created_at"));m.put("createdByName",metadata.get("created_by_name"));m.put("cancelledAt",metadata.get("cancelled_at"));m.put("cancelReason",metadata.get("cancel_reason"));m.put("cancelledByName",metadata.get("cancelled_by_name"));
+    Map<String,Object> metadata=jdbc.queryForMap("SELECT a.source,a.created_at,a.updated_at,a.cancelled_at,a.cancel_reason,coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,canceller.nickname cancelled_by_name FROM appointment a LEFT JOIN app_user creator ON creator.id=a.created_by_user_id LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id LEFT JOIN LATERAL (SELECT actor_name_snapshot FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE' ORDER BY created_at LIMIT 1) create_audit ON true WHERE a.id=?",id);
+    m.put("source",metadata.get("source"));m.put("createdAt",metadata.get("created_at"));m.put("updatedAt",metadata.get("updated_at"));m.put("createdByName",metadata.get("created_by_name"));m.put("cancelledAt",metadata.get("cancelled_at"));m.put("cancelReason",metadata.get("cancel_reason"));m.put("cancelledByName",metadata.get("cancelled_by_name"));
     List<Map<String,Object>> audits=jdbc.query("SELECT action,actor_name_snapshot,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=? ORDER BY created_at DESC",(rs,n)->{Map<String,Object>x=new LinkedHashMap<>();x.put("action",rs.getString(1));x.put("actorName",rs.getString(2));x.put("reason",rs.getString(3));x.put("before",rs.getString(4));x.put("after",rs.getString(5));x.put("createdAt",rs.getObject(6,OffsetDateTime.class));return x;},id);
     m.put("audits",audits);m.put("modifications",audits.stream().filter(x->"MODIFY".equals(x.get("action"))).map(this::modificationView).toList());return m;
   }

@@ -19,6 +19,7 @@ import './v08.css'
 import './v09.css'
 import './v10.css'
 import './v11.css'
+import './v12.css'
 
 const router = createRouter({
   history: createWebHistory(),

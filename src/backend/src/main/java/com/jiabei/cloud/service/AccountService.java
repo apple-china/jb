@@ -130,7 +130,7 @@ public class AccountService {
       if(count!=null&&count==0){username=candidate;break;}
     }
     if(username==null)throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_NAME_GENERATION_FAILED","账号生成冲突，请重试。");
-    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=true,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode("123456"),id);
+    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=false,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode("123456"),id);
     audit(id,"PASSWORD_ASSIGNED",actor,Map.of("username",username),trace);
     return Map.of("username",username,"password","123456");
   }

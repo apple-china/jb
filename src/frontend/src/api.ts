@@ -1,4 +1,4 @@
-import type { BookingContext, CurrentUser } from './types'
+import type { AnalyticsData, BookingContext, BookingOptions, CurrentUser } from './types'
 
 const API = '/api/v1'
 let csrfToken = sessionStorage.getItem('jiabei-csrf') ?? ''
@@ -59,6 +59,9 @@ export const api = {
     return {blob:await response.blob(),filename:encoded?decodeURIComponent(encoded):'加贝互娱·化妆预约记录.xlsx'}
   },
   adminAppointmentDetail: (id: string) => request<any>(`/admin/appointments/${id}`),
+  adminAnalytics:(startDate:string,endDate:string)=>request<AnalyticsData>(`/admin/analytics?startDate=${startDate}&endDate=${endDate}`),
+  adminBookingOptions:(date:string,appointmentId?:string)=>request<BookingOptions>(`/admin/appointments/options?date=${date}${appointmentId?`&appointmentId=${appointmentId}`:''}`),
+  adminAvailability:(date:string,makeupArtistId:string,appointmentId?:string)=>request<{slots:Array<{time:string;available:boolean;conflict?:boolean;reason?:string}>;conflictAllowed:boolean}>(`/admin/appointments/availability?date=${date}&makeupArtistId=${makeupArtistId}${appointmentId?`&appointmentId=${appointmentId}`:''}`),
   adminCreate: (body: object) => request('/admin/appointments', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
   adminCommand: (path: string, body: object) => request(`/admin/appointments/${path}`, { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
   adminUpdate: (id: string, body: object) => request(`/admin/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
