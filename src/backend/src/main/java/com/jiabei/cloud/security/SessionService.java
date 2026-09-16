@@ -70,7 +70,7 @@ public class SessionService {
     String token=randomToken(),csrf=randomToken();
     Instant expiresAt=Instant.now().plus(ttl);
     jdbc.update("DELETE FROM auth_session WHERE expires_at < now()");
-    jdbc.update("INSERT INTO auth_session(token_hash,user_id,credential_version,csrf_token,mock_login,expires_at) VALUES (?,?,?,?,?,?)",hash(token),row.id(),row.credentialVersion(),csrf,"MOCK".equals(method),expiresAt);
+    jdbc.update("INSERT INTO auth_session(token_hash,user_id,credential_version,csrf_token,mock_login,expires_at) VALUES (?,?,?,?,?,?)",hash(token),row.id(),row.credentialVersion(),csrf,"MOCK".equals(method),java.sql.Timestamp.from(expiresAt));
     writeCookie(response,token,(int)ttl.toSeconds());
     jdbc.update("UPDATE app_user SET last_login_at=now() WHERE id=?",row.id());auditLogin(row,identity,"LOGIN_SUCCESS",method,trace);
     return row.current(csrf);
@@ -85,7 +85,7 @@ public class SessionService {
     if(rows.isEmpty()||!rows.getFirst().active()||rows.getFirst().credentialVersion()!=session.credentialVersion()){
       jdbc.update("DELETE FROM auth_session WHERE token_hash=?",tokenHash);throw new BusinessException(HttpStatus.FORBIDDEN,"SESSION_INVALIDATED","当前登录已失效，请重新登录。");
     }
-    jdbc.update("UPDATE auth_session SET expires_at=?,updated_at=now() WHERE token_hash=?",Instant.now().plus(ttl),tokenHash);
+    jdbc.update("UPDATE auth_session SET expires_at=?,updated_at=now() WHERE token_hash=?",java.sql.Timestamp.from(Instant.now().plus(ttl)),tokenHash);
     writeCookie(response,token,(int)ttl.toSeconds());request.setAttribute("mockLogin",session.mockLogin());
     return rows.getFirst().current(session.csrf());
   }
