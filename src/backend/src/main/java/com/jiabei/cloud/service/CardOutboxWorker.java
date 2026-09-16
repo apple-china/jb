@@ -25,10 +25,38 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 public class CardOutboxWorker {
   private static final Logger log = LoggerFactory.getLogger(CardOutboxWorker.class);
+  static final String INITIAL_SCHEDULE_CLAIM_SQL = """
+      SELECT j.id FROM integration_job j
+      JOIN daily_card c ON c.business_date=(j.payload->>'businessDate')::date
+        AND c.group_open_conversation_id=j.payload->>'groupId'
+      WHERE j.job_type='CARD_REFRESH' AND j.status IN ('PENDING','RETRY_WAIT')
+        AND j.next_attempt_at<=now() AND (j.locked_at IS NULL OR j.locked_at<now()-interval '2 minutes')
+        AND c.delivered_version=0 AND c.business_date BETWEEN current_date AND current_date+1
+        AND NOT (c.business_date=current_date+1 AND EXISTS (
+          SELECT 1 FROM daily_card current_card
+          WHERE current_card.group_open_conversation_id=c.group_open_conversation_id
+            AND current_card.business_date=current_date AND current_card.delivered_version=0))
+      ORDER BY c.business_date,j.created_at,j.id
+      FOR UPDATE OF j SKIP LOCKED LIMIT 10
+      """;
+  static final String GENERAL_CLAIM_SQL = """
+      SELECT j.id FROM integration_job j
+      WHERE j.status IN ('PENDING','RETRY_WAIT') AND j.next_attempt_at<=now()
+        AND (j.locked_at IS NULL OR j.locked_at<now()-interval '2 minutes')
+        AND NOT (j.job_type='CARD_REFRESH' AND EXISTS (
+          SELECT 1 FROM daily_card c
+          WHERE c.business_date=(j.payload->>'businessDate')::date
+            AND c.group_open_conversation_id=j.payload->>'groupId'
+            AND c.delivered_version=0 AND c.business_date BETWEEN current_date AND current_date+1))
+      ORDER BY j.next_attempt_at,
+        CASE WHEN j.job_type='CARD_REFRESH' THEN (j.payload->>'businessDate')::date END,
+        j.created_at,j.id
+      FOR UPDATE OF j SKIP LOCKED LIMIT 10
+      """;
   private final JdbcTemplate jdbc;private final CardProjectionService projection;private final CardGateway gateway;private final BookingProperties props;private final TransactionTemplate transactions;
   public CardOutboxWorker(JdbcTemplate jdbc,CardProjectionService projection,CardGateway gateway,BookingProperties props,TransactionTemplate transactions){this.jdbc=jdbc;this.projection=projection;this.gateway=gateway;this.props=props;this.transactions=transactions;}
-  @Scheduled(fixedDelayString="${jiabei.booking.outbox-poll-ms:2000}") public void poll(){List<UUID> ids=transactions.execute(status->claim());if(ids!=null)ids.forEach(this::execute);}
-  private List<UUID> claim(){List<UUID> ids=jdbc.query("SELECT id FROM integration_job WHERE status IN ('PENDING','RETRY_WAIT') AND next_attempt_at<=now() AND (locked_at IS NULL OR locked_at<now()-interval '2 minutes') ORDER BY next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 10",(rs,n)->rs.getObject(1,UUID.class));ids.forEach(id->jdbc.update("UPDATE integration_job SET status='RUNNING',locked_at=now(),locked_by='local-worker',updated_at=now() WHERE id=?",id));return ids;}
+  @Scheduled(fixedDelayString="${jiabei.booking.outbox-poll-ms:2000}") public void poll(){List<UUID> ids=transactions.execute(status->claim(INITIAL_SCHEDULE_CLAIM_SQL));if(ids==null||ids.isEmpty())ids=transactions.execute(status->claim(GENERAL_CLAIM_SQL));if(ids!=null)ids.forEach(this::execute);}
+  private List<UUID> claim(String sql){List<UUID> ids=jdbc.query(sql,(rs,n)->rs.getObject(1,UUID.class));ids.forEach(id->jdbc.update("UPDATE integration_job SET status='RUNNING',locked_at=now(),locked_by='local-worker',updated_at=now() WHERE id=?",id));return ids;}
   /**
    * 网关调用成功后才写 first_delivered_at；“任务已入队”或“已领取”都不算成功发送。
    * 首次成功时间使用 COALESCE 保留，后续重新发送不会改变历史判断。

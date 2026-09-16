@@ -25,7 +25,7 @@ class ComplexMockDataExternalIT {
     Flyway flyway = Flyway.configure().locations("classpath:db/migration", "classpath:db/local")
         .cleanDisabled(false).dataSource(URL, USER, PASSWORD).load();
     flyway.clean();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(13);
+    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(15);
     jdbc = new JdbcTemplate(new DriverManagerDataSource(URL, USER, PASSWORD));
   }
 

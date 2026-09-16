@@ -21,6 +21,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class CardOutboxWorkerTest {
+  @Test
+  void prioritizesInitialScheduleCardsByDateAndBlocksTomorrowUntilTodaySucceeds() {
+    org.assertj.core.api.Assertions.assertThat(CardOutboxWorker.INITIAL_SCHEDULE_CLAIM_SQL)
+        .contains("current_card.business_date=current_date")
+        .contains("current_card.delivered_version=0")
+        .contains("ORDER BY c.business_date,j.created_at,j.id");
+    org.assertj.core.api.Assertions.assertThat(CardOutboxWorker.GENERAL_CLAIM_SQL)
+        .contains("c.delivered_version=0")
+        .contains("j.created_at,j.id");
+  }
+
   private JdbcTemplate jdbc;
   private CardProjectionService projection;
   private CardGateway gateway;

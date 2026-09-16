@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /** Centralizes schedule-card versioning and outbox de-duplication. */
@@ -22,8 +23,14 @@ public class CardRefreshService {
   }
 
   public void ensureAndRefreshWindow(LocalDate date, boolean allowEmpty) {
-    ensureScheduleCard(date, allowEmpty);
+    ensureChronologicalScheduleCard(date, allowEmpty);
     refreshExistingWindowExcept(date);
+  }
+
+  public void ensureChronologicalScheduleCard(LocalDate date, boolean allowEmpty) {
+    LocalDate today = LocalDate.now(clock);
+    if (date.equals(today.plusDays(1))) ensureScheduleCard(today, allowEmpty);
+    ensureScheduleCard(date, allowEmpty);
   }
 
   public void ensureScheduleCard(LocalDate date, boolean allowEmpty) {
@@ -53,6 +60,11 @@ public class CardRefreshService {
 
   public void refreshExistingWindow() {
     refreshExistingWindowExcept(null);
+  }
+
+  @Scheduled(cron="${jiabei.booking.card-relative-date-cron:0 0 0 * * *}", zone="Asia/Shanghai")
+  public void refreshRelativeDateLabels() {
+    refreshExistingWindow();
   }
 
   public void refreshExisting(LocalDate date) {

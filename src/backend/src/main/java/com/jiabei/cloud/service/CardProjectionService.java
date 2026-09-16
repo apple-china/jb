@@ -83,7 +83,8 @@ public class CardProjectionService {
     appointments = withEmptyState(appointments);
 
     Map<String, String> publicData = new LinkedHashMap<>();
-    publicData.put("data_date", date.format(DATE) + " " + chineseWeekday(date));
+    String relativeDate = relativeDateLabel(date, LocalDate.now(clock));
+    publicData.put("data_date", date.format(DATE) + (relativeDate.isEmpty() ? "" : " " + relativeDate));
     publicData.put("update_time", "更新于" + LocalDateTime.now(clock).format(UPDATE_TIME));
     // 钉钉 cardParamMap 的对象数组必须以 JSON 字符串传递。
     publicData.put("appointment_list", toJson(appointments));
@@ -210,16 +211,10 @@ public class CardProjectionService {
     }
   }
 
-  private static String chineseWeekday(LocalDate date) {
-    return "周" + switch (date.getDayOfWeek()) {
-      case MONDAY -> "一";
-      case TUESDAY -> "二";
-      case WEDNESDAY -> "三";
-      case THURSDAY -> "四";
-      case FRIDAY -> "五";
-      case SATURDAY -> "六";
-      case SUNDAY -> "日";
-    };
+  static String relativeDateLabel(LocalDate date, LocalDate today) {
+    if (date.equals(today)) return "今天";
+    if (date.equals(today.plusDays(1))) return "明天";
+    return "";
   }
 
   static String lateReminderText(UUID appointmentId, String streamerName, String dingTalkUserId) {

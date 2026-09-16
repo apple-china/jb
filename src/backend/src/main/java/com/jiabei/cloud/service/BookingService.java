@@ -162,7 +162,7 @@ public class BookingService {
   }
 
   @Transactional
-  public Map<String,Object> manualScheduleCard(CurrentUser actor,LocalDate date){if(!actor.isAdministrator())throw BusinessException.forbidden();policy.validateDate(date,LocalDate.now(clock));cards.ensureScheduleCard(date,true);return Map.of("businessDate",date,"queued",true);}
+  public Map<String,Object> manualScheduleCard(CurrentUser actor,LocalDate date){if(!actor.isAdministrator())throw BusinessException.forbidden();policy.validateDate(date,LocalDate.now(clock));cards.ensureChronologicalScheduleCard(date,true);return Map.of("businessDate",date,"queued",true);}
 
   /**
    * 查询今天和明天是否曾被钉钉网关实际接收。

@@ -19,6 +19,15 @@ import org.junit.jupiter.api.Test;
 
 class CardProjectionServiceTest {
   @Test
+  void labelsOnlyTodayAndTomorrow() {
+    LocalDate today = LocalDate.of(2026, 9, 16);
+    assertThat(CardProjectionService.relativeDateLabel(today, today)).isEqualTo("今天");
+    assertThat(CardProjectionService.relativeDateLabel(today.plusDays(1), today)).isEqualTo("明天");
+    assertThat(CardProjectionService.relativeDateLabel(today.minusDays(1), today)).isEmpty();
+    assertThat(CardProjectionService.relativeDateLabel(today.plusDays(2), today)).isEmpty();
+  }
+
+  @Test
   void projectsLateReminderWithPostgresDateAndCurrentTemplateFields() {
     JdbcTemplate jdbc = mock(JdbcTemplate.class);
     UUID appointmentId = UUID.randomUUID();

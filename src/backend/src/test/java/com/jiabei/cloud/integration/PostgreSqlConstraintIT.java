@@ -8,5 +8,5 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers(disabledWithoutDocker=true)
 class PostgreSqlConstraintIT {
   @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine").withDatabaseName("jiabei").withUsername("jiabei").withPassword("test");
-  @Test void newBaselineMigratesFromEmptyDatabase(){Flyway f=Flyway.configure().locations("classpath:db/migration","classpath:db/local").dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();assertThat(f.migrate().migrationsExecuted).isEqualTo(13);}
+  @Test void newBaselineMigratesFromEmptyDatabase(){Flyway f=Flyway.configure().locations("classpath:db/migration","classpath:db/local").dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();assertThat(f.migrate().migrationsExecuted).isEqualTo(15);}
 }
