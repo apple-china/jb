@@ -51,3 +51,6 @@ vite.config.*.timestamp-*.mjs
 
 # Local agent/workflow scratch data
 .superpowers/
+docs/Claude_第一阶段部署上下文补充.md
+docs/Claude_第一阶段代码审查任务书.md
+docs/Claude_第一阶段审查输入输出包.md
