@@ -15,7 +15,16 @@
 | 上传卷 | 测试专用卷 | `jiabei-production_uploads-data` |
 | Nginx 上游 | `frontend:80` | `jiabei-production-frontend:80` |
 
-生产数据库、后端和前端均不映射宿主机端口，只通过生产专用内部网络通信。Nginx 后续加入该网络，并通过唯一别名 `jiabei-production-frontend` 访问前端；生产服务不得直接开放到公网。
+生产后端和前端不映射宿主机端口，只通过生产专用内部网络通信。Nginx 加入该网络，并通过唯一别名 `jiabei-production-frontend` 访问前端。生产数据库仅映射到服务器回环地址 `127.0.0.1:5433`，用于通过 SSH 隧道管理；该端口不得监听公网地址。
+
+生产数据库图形客户端连接参数：
+
+- SSH 服务器：生产服务器的 SSH 地址和密钥。
+- 数据库主机：`127.0.0.1`。
+- 数据库端口：`5433`。
+- 初始数据库：`jiabei_production`。
+- 数据库用户：`jiabei_production`。
+- 密码：服务器 `.env.production` 中的 `PRODUCTION_DATABASE_PASSWORD`，不得写入仓库或连接导出文件。
 
 ## 第一阶段仓库验证
 
