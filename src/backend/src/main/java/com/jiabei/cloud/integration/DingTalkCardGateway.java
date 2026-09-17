@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -28,6 +30,7 @@ import org.springframework.web.client.RestClientResponseException;
 @ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DingTalkCardGateway implements CardGateway {
+  private static final Logger log = LoggerFactory.getLogger(DingTalkCardGateway.class);
   private static final String TOKEN_HEADER = "x-acs-dingtalk-access-token";
   private static final ObjectMapper JSON = new ObjectMapper();
   private final DingTalkOpenApiClient client;
@@ -144,6 +147,7 @@ public class DingTalkCardGateway implements CardGateway {
       }
     } catch (RestClientResponseException error) {
       int status = error.getStatusCode().value();
+      logRemoteRejection(path, status, error.getResponseBodyAsString());
       if (status == 401) {
         client.invalidateAccessToken();
         throw new CardGatewayException("TOKEN_EXPIRED", true, false);
@@ -163,6 +167,26 @@ public class DingTalkCardGateway implements CardGateway {
     } catch (RuntimeException error) {
       throw new CardGatewayException("DINGTALK_UNAVAILABLE", true, false);
     }
+  }
+
+  private static void logRemoteRejection(String path, int status, String responseBody) {
+    String code = "unknown";
+    String message = "unknown";
+    try {
+      JsonNode response = JSON.readTree(responseBody == null ? "{}" : responseBody);
+      code = safeLogValue(response.path("code").asText("unknown"));
+      message = safeLogValue(response.path("message").asText(
+          response.path("msg").asText("unknown")));
+    } catch (JsonProcessingException ignored) {
+      message = "unparseable-response";
+    }
+    log.warn("DingTalk card request rejected: path={}, status={}, code={}, message={}",
+        path, status, code, message);
+  }
+
+  private static String safeLogValue(String value) {
+    if (value == null || value.isBlank()) return "unknown";
+    return value.replaceAll("[\\r\\n\\t]", " ").substring(0, Math.min(value.length(), 240));
   }
 
   private static void validateCreateAndDeliverResponse(String responseBody) {
