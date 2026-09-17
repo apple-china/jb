@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,7 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Replaces only a complete snapshot. Missing employees are logically deleted and linked accounts are disabled. */
-@Profile("dingtalk-test")
+@Profile({"dingtalk-test", "production"})
+@ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Service
 public class DingTalkEmployeeSyncService implements ApplicationRunner {
   private static final Logger log = LoggerFactory.getLogger(DingTalkEmployeeSyncService.class);

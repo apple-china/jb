@@ -1,9 +1,12 @@
-name: 部署 main 到钉钉测试环境
+name: 自动部署 main
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - .github/workflows/deploy-main.yml
+      - .github/workflows/deploy-production.yml
   workflow_dispatch:
 
 permissions:
@@ -21,7 +24,7 @@ jobs:
 
     steps:
       - name: 获取 main 代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 配置 SSH
         env:
@@ -46,6 +49,7 @@ jobs:
             --exclude '.env.*' \
             --exclude '.tools/' \
             --exclude '.runtime/' \
+            --exclude 'artifacts/database-backups/' \
             --exclude 'uploads/' \
             --exclude 'downloads/' \
             -e "ssh -p $DEPLOY_PORT" \

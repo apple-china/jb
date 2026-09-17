@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** Minimal DingTalk client shared by SSO and the scheduled directory reconciliation. */
-@Profile("dingtalk-test")
+@Profile({"dingtalk-test", "production"})
+@ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DingTalkOpenApiClient implements DingTalkIdentityGateway, DingTalkRemoteDirectory {
   private static final String API = "https://api.dingtalk.com";

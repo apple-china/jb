@@ -26,6 +26,8 @@
 - 数据库用户：`jiabei_production`。
 - 密码：服务器 `.env.production` 中的 `PRODUCTION_DATABASE_PASSWORD`，不得写入仓库或连接导出文件。
 
+钉钉和魔点集成使用独立开关 `DINGTALK_ENABLED`、`MOREDIAN_ENABLED`，默认均为 `false`。只有对应凭据和平台侧配置全部完成后才能单独启用；启用后缺少必要凭据时，后端必须启动失败，不允许静默降级。
+
 ## 第一阶段仓库验证
 
 复制示例文件只用于本地解析校验，不要填写真实凭据或提交生成的文件：

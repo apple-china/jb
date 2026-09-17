@@ -84,6 +84,8 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 第一阶段只准备并验证仓库配置，不创建或重置数据库、不部署服务器、不修改反向代理或域名流量。完整边界、后续部署步骤和回滚要求见 [生产环境准备与交付](docs/production-environment.md)。
 
+服务器生成的 `artifacts/database-backups/` 不属于发布制品，GitHub Actions 同步代码时必须保留该目录，禁止由 `rsync --delete` 删除。
+
 ### 钉钉测试环境
 
 `dingtalk-test` 使用独立数据库 `jiabei_dingtalk_test` 和生产迁移，不加载 V7 Mock 数据；首次启动仅创建一个未绑定钉钉 ID 的超管。设置 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET` 后，后端启动时及每 5 分钟全量核对通讯录，离职员工逻辑删除并停用已关联账号。密钥只允许由进程环境注入。

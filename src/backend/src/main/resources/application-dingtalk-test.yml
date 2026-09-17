@@ -13,6 +13,7 @@ jiabei:
       dingtalk-user-id: ${SUPER_ADMIN_DINGTALK_USER_ID:}
       nickname: ${SUPER_ADMIN_NICKNAME:Admin}
   dingtalk:
+    enabled: true
     client-id: ${DINGTALK_CLIENT_ID:}
     client-secret: ${DINGTALK_CLIENT_SECRET:}
     app-id: ${DINGTALK_APP_ID:}

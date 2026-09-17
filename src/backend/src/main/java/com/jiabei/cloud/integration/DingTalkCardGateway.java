@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,8 @@ import org.springframework.web.client.RestClientResponseException;
  * <p>创建时使用“创建并投放”接口，更新时按业务键局部更新卡片数据。
  * 密钥与群、模板标识均来自运行环境，不写入代码或镜像。</p>
  */
-@Profile("dingtalk-test")
+@Profile({"dingtalk-test", "production"})
+@ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DingTalkCardGateway implements CardGateway {
   private static final String TOKEN_HEADER = "x-acs-dingtalk-access-token";

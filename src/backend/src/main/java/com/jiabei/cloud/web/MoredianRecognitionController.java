@@ -12,6 +12,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@ConditionalOnProperty(name = "jiabei.moredian.enabled", havingValue = "true", matchIfMissing = true)
 @RequestMapping("/api/v1/integrations/moredian")
 public class MoredianRecognitionController {
   private static final Logger log = LoggerFactory.getLogger(MoredianRecognitionController.class);
@@ -50,6 +52,15 @@ public class MoredianRecognitionController {
     this.key = key;
     this.expectedDevice = expectedDevice;
     this.requireSignature = requireSignature;
+    if (expectedOrg == null || expectedOrg.isBlank()) {
+      throw new IllegalStateException("MOREDIAN_ORG_ID is required when Moredian integration is enabled");
+    }
+    if (expectedDevice == null || expectedDevice.isBlank()) {
+      throw new IllegalStateException("MOREDIAN_DEVICE_SN is required when Moredian integration is enabled");
+    }
+    if (requireSignature && (key == null || key.isBlank())) {
+      throw new IllegalStateException("MOREDIAN_ORG_AUTH_KEY is required when Moredian signature verification is enabled");
+    }
   }
 
   @PostMapping("/recognition-events")
