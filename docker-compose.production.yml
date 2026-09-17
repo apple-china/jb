@@ -15,6 +15,7 @@ services:
       - "127.0.0.1:5433:5432"
     networks:
       - backend-net
+      - db-access-net
     healthcheck:
       test:
         - CMD-SHELL
@@ -115,3 +116,5 @@ volumes:
 networks:
   backend-net:
     internal: true
+  db-access-net:
+    driver: bridge
