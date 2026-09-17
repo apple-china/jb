@@ -1,4 +1,4 @@
-name: 手动部署 production 到独立生产环境
+name: 手动部署 production
 
 on:
   workflow_dispatch:
