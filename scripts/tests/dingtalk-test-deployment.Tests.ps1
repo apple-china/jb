@@ -58,8 +58,4 @@ Assert-UniqueMigrationVersions @(
   (Join-Path $root 'src\backend\src\main\resources\db\local')
 ) 'Local Flyway locations must use unique migration versions.'
 
-<<<<<<< HEAD
 Write-Host 'PASS DingTalk test deployment contract (25 cases)'
-=======
-Write-Host 'PASS DingTalk test deployment contract (14 cases)'
->>>>>>> codex/frontend-ui-fixes

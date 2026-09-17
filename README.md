@@ -78,6 +78,12 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 ## 配置与发布边界
 
+### 独立生产环境
+
+`production` 分支使用独立的 `docker-compose.production.yml` 和 `.env.production.example`，目标域名为 `https://jbei.huixinghub.top`。生产数据库、数据库用户、网络、上传目录和数据卷均与 `main` 对应的测试环境隔离；真实 `.env.production` 只允许保存在服务器，不得提交。
+
+第一阶段只准备并验证仓库配置，不创建或重置数据库、不部署服务器、不修改反向代理或域名流量。完整边界、后续部署步骤和回滚要求见 [生产环境准备与交付](docs/production-environment.md)。
+
 ### 钉钉测试环境
 
 `dingtalk-test` 使用独立数据库 `jiabei_dingtalk_test` 和生产迁移，不加载 V7 Mock 数据；首次启动仅创建一个未绑定钉钉 ID 的超管。设置 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET` 后，后端启动时及每 5 分钟全量核对通讯录，离职员工逻辑删除并停用已关联账号。密钥只允许由进程环境注入。

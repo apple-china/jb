@@ -1,0 +1,115 @@
+name: jiabei-production
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PRODUCTION_DATABASE_NAME:?PRODUCTION_DATABASE_NAME is required}
+      POSTGRES_USER: ${PRODUCTION_DATABASE_USER:?PRODUCTION_DATABASE_USER is required}
+      POSTGRES_PASSWORD: ${PRODUCTION_DATABASE_PASSWORD:?PRODUCTION_DATABASE_PASSWORD is required}
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend-net
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  backend:
+    build: ./src/backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      DATABASE_URL: jdbc:postgresql://db:5432/${PRODUCTION_DATABASE_NAME:?PRODUCTION_DATABASE_NAME is required}
+      DATABASE_USER: ${PRODUCTION_DATABASE_USER:?PRODUCTION_DATABASE_USER is required}
+      DATABASE_PASSWORD: ${PRODUCTION_DATABASE_PASSWORD:?PRODUCTION_DATABASE_PASSWORD is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      APP_ENTRY_URL: ${APP_ENTRY_URL:?APP_ENTRY_URL is required}
+      UPLOAD_DIRECTORY: /app/uploads
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:?SUPER_ADMIN_USERNAME is required}
+      SUPER_ADMIN_INITIAL_PASSWORD: ${SUPER_ADMIN_INITIAL_PASSWORD:?SUPER_ADMIN_INITIAL_PASSWORD is required}
+      SUPER_ADMIN_DINGTALK_USER_ID: ${SUPER_ADMIN_DINGTALK_USER_ID:-}
+      SUPER_ADMIN_NICKNAME: ${SUPER_ADMIN_NICKNAME:-Admin}
+      DINGTALK_CORP_ID: ${DINGTALK_CORP_ID:-}
+      DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:-}
+      DINGTALK_CLIENT_SECRET: ${DINGTALK_CLIENT_SECRET:-}
+      DINGTALK_APP_ID: ${DINGTALK_APP_ID:-}
+      DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID:-}
+      DINGTALK_GROUP_OPEN_CONVERSATION_ID: ${DINGTALK_GROUP_OPEN_CONVERSATION_ID:-}
+      DINGTALK_CARD_TEMPLATE_ID: ${DINGTALK_CARD_TEMPLATE_ID:-}
+      DINGTALK_LATE_CARD_TEMPLATE_ID: ${DINGTALK_LATE_CARD_TEMPLATE_ID:-}
+      MOREDIAN_ORG_ID: ${MOREDIAN_ORG_ID:-}
+      MOREDIAN_ORG_AUTH_KEY: ${MOREDIAN_ORG_AUTH_KEY:-}
+      MOREDIAN_DEVICE_SN: ${MOREDIAN_DEVICE_SN:-}
+      MOREDIAN_REQUIRE_SIGNATURE: ${MOREDIAN_REQUIRE_SIGNATURE:-true}
+      MOREDIAN_RETENTION_DAYS: ${MOREDIAN_RETENTION_DAYS:-180}
+      MOREDIAN_MAX_EVENTS: ${MOREDIAN_MAX_EVENTS:-60000}
+      MOREDIAN_CLEANUP_INITIAL_DELAY_MS: ${MOREDIAN_CLEANUP_INITIAL_DELAY_MS:-300000}
+      MOREDIAN_CLEANUP_INTERVAL_MS: ${MOREDIAN_CLEANUP_INTERVAL_MS:-604800000}
+      TZ: Asia/Shanghai
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
+    networks:
+      - backend-net
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  frontend:
+    build:
+      context: ./src/frontend
+      args:
+        VITE_DINGTALK_CLIENT_ID: ${VITE_DINGTALK_CLIENT_ID:-}
+        VITE_DINGTALK_CORP_ID: ${VITE_DINGTALK_CORP_ID:-}
+        VITE_ENABLE_MOCK_LOGIN: "false"
+        VITE_DINGTALK_AUTO_LOGIN: "false"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${PRODUCTION_FRONTEND_PORT:?PRODUCTION_FRONTEND_PORT is required}:80"
+    networks:
+      - backend-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  postgres-data:
+  uploads-data:
+
+networks:
+  backend-net:
+    internal: true
