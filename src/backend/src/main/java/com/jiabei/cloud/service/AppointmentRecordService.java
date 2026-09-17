@@ -92,6 +92,6 @@ public class AppointmentRecordService {
   private String value(JsonNode node,String field,Map<String,String> names){if(node==null||node.get(field)==null||node.get(field).isNull())return "—";String raw=node.get(field).asText();return names.getOrDefault(raw,raw);}
   private String lateMinutes(ExportRow row){if(!"LATE".equals(row.attendanceStatus())||row.attendanceAt()==null)return "";return String.valueOf(Math.max(0,Duration.between(row.startAt(),row.attendanceAt()).toMinutes()));}
   private String local(OffsetDateTime value){return value.atZoneSameInstant(zone).format(DATE_TIME);}
-  private String status(String value){return "ACTIVE".equals(value)?"有效":"已取消";}private String attendance(String value){return Map.of("PENDING","待到司","ARRIVED","已到司","NOT_ARRIVED","未到","LATE","迟到").getOrDefault(value,value);}
+  private String status(String value){return "ACTIVE".equals(value)?"有效":"已取消";}private String attendance(String value){return Map.of("PENDING","待签到","ARRIVED","已签到","NOT_ARRIVED","未到","LATE","迟到").getOrDefault(value,value);}
   private boolean text(String value){return value!=null&&!value.isBlank();}private String safe(String value){return value==null?"":value;}private BusinessException invalid(String message){return new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_RECORD_FILTER",message);}
 }

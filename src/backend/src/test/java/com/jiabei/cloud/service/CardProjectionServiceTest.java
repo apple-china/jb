@@ -64,9 +64,9 @@ class CardProjectionServiceTest {
     assertThat(item)
         .containsEntry("time", "09:10")
         .containsEntry("streamer", "欧阳小..")
-        .containsEntry("status", "")
-        .containsEntry("status_visible", false)
-        .containsEntry("status_placeholder_visible", true)
+        .containsEntry("status", "待签到")
+        .containsEntry("status_visible", true)
+        .containsEntry("status_placeholder_visible", false)
         .containsEntry("makeup_artist", "克里斯蒂..")
         .containsEntry("team", "星光直播..")
         .containsEntry("row_light_color", "#A6AAB3")
@@ -127,7 +127,7 @@ class CardProjectionServiceTest {
         "08:30", "米粒", "ARRIVED", "小美老师", "晨光二团", false);
 
     assertThat(item)
-        .containsEntry("status", "签到")
+        .containsEntry("status", "已签到")
         .containsEntry("status_visible", true)
         .containsEntry("status_placeholder_visible", false)
         .containsEntry("status_color", "green");

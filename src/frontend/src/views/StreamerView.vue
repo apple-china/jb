@@ -51,7 +51,7 @@ const greeting = computed(() => {
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone:'Asia/Shanghai', hour:'2-digit', hourCycle:'h23' }).format(new Date()))
   return hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好'
 })
-function attendanceLabel(value:string){return ({PENDING:'待到司',ARRIVED:'已到司',NOT_ARRIVED:'未到',LATE:'迟到'} as Record<string,string>)[value]??value}
+function attendanceLabel(value:string){return ({PENDING:'待签到',ARRIVED:'已签到',NOT_ARRIVED:'未到',LATE:'迟到'} as Record<string,string>)[value]??value}
 function scheduleAttendanceLabel(value:string){return ({PENDING:'待签到',ARRIVED:'已签到',NOT_ARRIVED:'未到',LATE:'迟到'} as Record<string,string>)[value]??value}
 
 async function initialize() {
@@ -133,7 +133,7 @@ onMounted(initialize)
         <article v-if="context.myAppointment" class="appointment-card" :class="context.myAppointment.status.toLowerCase()">
           <div class="appointment-time"><Clock3 :size="19" /><strong><TimeText :value="context.myAppointment.startTime" /></strong><span class="attendance-badge" :class="context.myAppointment.attendanceStatus.toLowerCase()">{{ attendanceLabel(context.myAppointment.attendanceStatus) }}</span></div>
           <dl class="appointment-details"><div><dt>化妆师</dt><dd>{{ context.myAppointment.makeupArtistName }}</dd></div><div><dt>团播组</dt><dd>{{ context.myAppointment.teamName }}</dd></div></dl>
-          <div v-if="context.writeEnabled" class="appointment-actions"><button v-if="context.myAppointment.attendanceStatus !== 'LATE'" class="appointment-action modify" @click="openBooking('modify')"><Pencil :size="16" />修改</button><button class="appointment-action cancel" @click="cancelOpen=true"><X :size="17" />取消</button></div>
+          <div v-if="context.writeEnabled && context.myAppointment.selfOperationAllowed" class="appointment-actions"><button class="appointment-action modify" @click="openBooking('modify')"><Pencil :size="16" />修改</button><button class="appointment-action cancel" @click="cancelOpen=true"><X :size="17" />取消</button></div>
         </article>
         <article v-else class="empty-card"><CalendarDays :size="26" /><p>{{ emptyText }}</p></article>
       </section>

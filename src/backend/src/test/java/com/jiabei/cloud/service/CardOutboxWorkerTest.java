@@ -107,13 +107,13 @@ class CardOutboxWorkerTest {
   }
 
   @Test
-  void skipsHistoricalLateReminderInsteadOfSendingIt() {
+  void skipsReminderWhenAppointmentIsNoLongerUnarrived() {
     UUID appointmentId = UUID.randomUUID();
     when(jdbc.queryForMap("SELECT job_type,business_key,attempt_count,max_attempts FROM integration_job WHERE id=?", jobId))
         .thenReturn(Map.of("job_type", "LATE_REMINDER", "business_key", appointmentId.toString(),
             "attempt_count", 0, "max_attempts", 5));
     when(jdbc.queryForObject(
-        "SELECT count(*) FROM appointment WHERE id=? AND booking_date=current_date AND status='ACTIVE' AND attendance_status='LATE' AND attendance_event_id IS NULL",
+        "SELECT count(*) FROM appointment WHERE id=? AND status='ACTIVE' AND attendance_status='NOT_ARRIVED' AND attendance_evidence_at IS NULL AND now()>=start_at+interval '10 minutes'",
         Integer.class, appointmentId)).thenReturn(0);
 
     worker.execute(jobId);
@@ -123,5 +123,23 @@ class CardOutboxWorkerTest {
     verify(jdbc).update(
         "UPDATE late_notification SET status='FAILED',last_error_code='NOT_ELIGIBLE',updated_at=now() WHERE appointment_id=? AND status='PENDING'",
         appointmentId);
+  }
+
+  @Test
+  void sendsReminderOnlyForActiveUnarrivedAppointmentWithoutEvidence() {
+    UUID appointmentId = UUID.randomUUID();
+    when(jdbc.queryForMap("SELECT job_type,business_key,attempt_count,max_attempts FROM integration_job WHERE id=?", jobId))
+        .thenReturn(Map.of("job_type", "LATE_REMINDER", "business_key", appointmentId.toString(),
+            "attempt_count", 0, "max_attempts", 5));
+    when(jdbc.queryForObject(
+        "SELECT count(*) FROM appointment WHERE id=? AND status='ACTIVE' AND attendance_status='NOT_ARRIVED' AND attendance_evidence_at IS NULL AND now()>=start_at+interval '10 minutes'",
+        Integer.class, appointmentId)).thenReturn(1);
+    when(projection.projectLate(appointmentId)).thenReturn(payload);
+
+    worker.execute(jobId);
+
+    verify(projection).projectLate(appointmentId);
+    verify(gateway).create(payload);
+    verify(jdbc).update("UPDATE appointment SET late_reminded_at=now(),updated_at=now() WHERE id=?", appointmentId);
   }
 }

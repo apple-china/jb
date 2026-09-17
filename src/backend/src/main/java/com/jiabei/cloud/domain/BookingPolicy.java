@@ -29,9 +29,7 @@ public class BookingPolicy {
   }
   public String attendanceStatus(ZonedDateTime now,ZonedDateTime start,ZonedDateTime evidence){
     ZonedDateTime late=start.plusMinutes(properties.lateGraceMinutes());
-    if(evidence!=null)return evidence.isBefore(late)?"ARRIVED":"LATE";
-    if(now.isBefore(start))return "PENDING";
-    if(now.isBefore(late))return "NOT_ARRIVED";
-    return "LATE";
+    if(evidence!=null)return evidence.isAfter(late)?"LATE":"ARRIVED";
+    return now.isBefore(late)?"PENDING":"NOT_ARRIVED";
   }
 }

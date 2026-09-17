@@ -163,7 +163,8 @@ public class CardProjectionService {
       String team,
       boolean past) {
     String status = switch (attendanceStatus) {
-      case "ARRIVED" -> "签到";
+      case "PENDING" -> "待签到";
+      case "ARRIVED" -> "已签到";
       case "NOT_ARRIVED" -> "未到";
       case "LATE" -> "迟到";
       default -> "";

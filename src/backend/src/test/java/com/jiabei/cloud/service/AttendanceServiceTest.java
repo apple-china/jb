@@ -27,7 +27,7 @@ class AttendanceServiceTest {
   private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
   @Test
-  void attendanceEvidenceWindowEndsAtLateThreshold() {
+  void attendanceEvidenceWindowIncludesBothTwoHourBoundaries() {
     CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
     BookingProperties properties = new BookingProperties(
         ZONE, 10, 20, 20, 1, 120, 10, "group", "schedule", "late", "https://example.test", 5);
@@ -41,9 +41,11 @@ class AttendanceServiceTest {
     ReflectionTestUtils.invokeMethod(service, "firstEvidence", appointment);
 
     assertThat(jdbc.arguments[1]).isEqualTo(start.minusMinutes(120).toOffsetDateTime());
-    assertThat(jdbc.arguments[2]).isEqualTo(start.plusMinutes(10).toOffsetDateTime());
+    assertThat(jdbc.arguments[2]).isEqualTo(start.plusMinutes(120).toOffsetDateTime());
     assertThat(jdbc.arguments[4]).isEqualTo(appointment.id());
     assertThat(jdbc.sql).contains("bound.status='ACTIVE'")
+        .contains("g.occurred_at>=?")
+        .contains("g.occurred_at<=?")
         .contains("bound.id<>?")
         .contains("FOR UPDATE OF g SKIP LOCKED");
   }
@@ -60,12 +62,12 @@ class AttendanceServiceTest {
     assertThat(service.ingest("event-1", "org", "device", "ding-user-1", occurredAt, "{}", "trace")).isTrue();
 
     assertThat(jdbc.candidateSql).doesNotContain("booking_date")
-        .contains("a.start_at>?")
-        .contains("a.start_at<?")
+        .contains("a.start_at>=?")
+        .contains("a.start_at<=?")
         .contains("ORDER BY CASE WHEN a.start_at<=? THEN 0 ELSE 1 END")
         .contains("abs(extract(epoch")
         .contains("LIMIT 1 FOR UPDATE OF a SKIP LOCKED");
-    assertThat(jdbc.candidateArguments[2]).isEqualTo(occurredAt.minusMinutes(10).toOffsetDateTime());
+    assertThat(jdbc.candidateArguments[2]).isEqualTo(occurredAt.minusMinutes(120).toOffsetDateTime());
     assertThat(jdbc.candidateArguments[3]).isEqualTo(occurredAt.plusMinutes(120).toOffsetDateTime());
     assertThat(jdbc.candidateArguments[4]).isEqualTo(occurredAt.toOffsetDateTime());
     assertThat(jdbc.candidateArguments[5]).isEqualTo(occurredAt.toOffsetDateTime());
@@ -164,7 +166,8 @@ class AttendanceServiceTest {
 
     assertThat(evidence).isNotNull();
     assertThat(evidence.at()).isEqualTo(evidenceAt);
-    assertThat(jdbc.arguments).isNull();
+    assertThat(jdbc.arguments[1]).isEqualTo(start.minusMinutes(120).toOffsetDateTime());
+    assertThat(jdbc.arguments[2]).isEqualTo(evidenceAt.minusNanos(1).toOffsetDateTime());
   }
 
   private static final class CapturingJdbcTemplate extends JdbcTemplate {
