@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: 获取 production 代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: production
 
@@ -49,6 +49,7 @@ jobs:
             --exclude '.deployment-backups/' \
             --exclude '.tools/' \
             --exclude '.runtime/' \
+            --exclude 'artifacts/database-backups/' \
             --exclude 'uploads/' \
             --exclude 'downloads/' \
             -e "ssh -p $DEPLOY_PORT" \

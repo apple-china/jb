@@ -78,6 +78,8 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 ## 配置与发布边界
 
+服务器生成的 `artifacts/database-backups/` 不属于发布制品，GitHub Actions 同步代码时必须保留该目录，禁止由 `rsync --delete` 删除。
+
 ### 钉钉测试环境
 
 `dingtalk-test` 使用独立数据库 `jiabei_dingtalk_test` 和生产迁移，不加载 V7 Mock 数据；首次启动仅创建一个未绑定钉钉 ID 的超管。设置 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET` 后，后端启动时及每 5 分钟全量核对通讯录，离职员工逻辑删除并停用已关联账号。密钥只允许由进程环境注入。

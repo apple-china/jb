@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: 获取 main 代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 配置 SSH
         env:
@@ -49,6 +49,7 @@ jobs:
             --exclude '.env.*' \
             --exclude '.tools/' \
             --exclude '.runtime/' \
+            --exclude 'artifacts/database-backups/' \
             --exclude 'uploads/' \
             --exclude 'downloads/' \
             -e "ssh -p $DEPLOY_PORT" \
