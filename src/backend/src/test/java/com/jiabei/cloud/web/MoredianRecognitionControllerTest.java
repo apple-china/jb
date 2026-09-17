@@ -36,6 +36,22 @@ class MoredianRecognitionControllerTest {
   }
 
   @Test
+  void rejectsEnabledIntegrationWithoutRequiredConfiguration() {
+    assertThatThrownBy(() -> new MoredianRecognitionController(
+        attendance, new ObjectMapper(), verifier, "", "", "", true))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("MOREDIAN_ORG_ID");
+  }
+
+  @Test
+  void requiresAuthKeyWhenSignatureVerificationIsEnabled() {
+    assertThatThrownBy(() -> new MoredianRecognitionController(
+        attendance, new ObjectMapper(), verifier, ORG, "", DEVICE, true))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("MOREDIAN_ORG_AUTH_KEY");
+  }
+
+  @Test
   void acceptsValidSignedSuccessEventAndPassesExactRawBody() {
     when(verifier.verify(RAW, "nonce", ORG, "1", "timestamp", "signature", "auth-key-test"))
         .thenReturn(true);
