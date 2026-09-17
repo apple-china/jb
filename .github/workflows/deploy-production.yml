@@ -1,0 +1,108 @@
+name: 手动部署 production 到独立生产环境
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jiabei-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 备份、上传并更新生产服务
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 获取 production 代码
+        uses: actions/checkout@v4
+        with:
+          ref: production
+
+      - name: 配置 SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: 上传代码并保留生产配置与备份
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env.production' \
+            --exclude '.env.production.pre-*' \
+            --exclude '.env.production.*.bak' \
+            --exclude '.deployment-backups/' \
+            --exclude '.tools/' \
+            --exclude '.runtime/' \
+            --exclude 'uploads/' \
+            --exclude 'downloads/' \
+            -e "ssh -p $DEPLOY_PORT" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-production/"
+
+      - name: 备份数据库并更新生产服务
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -eu
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -eu
+            cd /opt/stacks/jiabei-production
+            test -s .env.production
+
+            compose="docker compose --env-file .env.production -f docker-compose.production.yml"
+            $compose config --quiet
+
+            install -d -m 700 .deployment-backups
+            if $compose ps -q db | grep -q .; then
+              backup_file=".deployment-backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
+              $compose exec -T db \
+                pg_dump -U jiabei_production -d jiabei_production -Fc \
+                > "$backup_file"
+              chmod 600 "$backup_file"
+              test -s "$backup_file"
+              echo "Created $backup_file"
+            fi
+
+            $compose build backend frontend
+            $compose up -d --remove-orphans
+
+            for service in db backend frontend; do
+              container_id=$($compose ps -q "$service")
+              test -n "$container_id"
+              status=starting
+              for attempt in $(seq 1 24); do
+                status=$(docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" "$container_id")
+                [ "$status" = healthy ] && break
+                [ "$status" = unhealthy ] && break
+                sleep 5
+              done
+              if [ "$status" != healthy ]; then
+                $compose logs --no-color --tail=100 "$service"
+                echo "$service failed health validation: $status" >&2
+                exit 1
+              fi
+            done
+
+            $compose exec -T backend \
+              curl -fsS http://127.0.0.1:8080/actuator/health
+            $compose exec -T frontend \
+              wget -q -O /dev/null http://127.0.0.1/
+            $compose ps
+          '

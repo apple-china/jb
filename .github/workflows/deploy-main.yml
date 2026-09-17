@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - .github/workflows/deploy-main.yml
+      - .github/workflows/deploy-production.yml
   workflow_dispatch:
 
 permissions:
