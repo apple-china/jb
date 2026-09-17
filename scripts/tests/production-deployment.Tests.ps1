@@ -19,6 +19,7 @@ Assert-Contains $compose 'uploads-data:/app/uploads' 'Production uploads must us
 Assert-Contains $compose '127.0.0.1:${PRODUCTION_FRONTEND_PORT:?' 'Production frontend must bind to a configurable loopback port.'
 Assert-Contains $compose 'VITE_ENABLE_MOCK_LOGIN: "false"' 'Production frontend must disable mock login.'
 Assert-Contains $compose 'VITE_DINGTALK_AUTO_LOGIN: "false"' 'Production frontend must not enable DingTalk auto login yet.'
+Assert-Contains $compose 'jiabei-production-frontend' 'Production frontend must expose a unique network alias for Nginx.'
 Assert-Contains $compose 'condition: service_healthy' 'Production dependencies must wait for health checks.'
 Assert-Contains $compose 'restart: unless-stopped' 'Production services must define a restart policy.'
 Assert-Contains $compose 'max-size: 10m' 'Production logs must be size limited.'
@@ -50,4 +51,4 @@ if ($compose -match 'jiabei_dingtalk_test|jb\.huixinghub\.top|jiabei_local|SPRIN
   throw 'Production Compose must not reference test/local resources or profiles.'
 }
 
-Write-Host 'PASS Production deployment contract (26 cases)'
+Write-Host 'PASS Production deployment contract (27 cases)'

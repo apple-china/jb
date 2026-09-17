@@ -93,7 +93,9 @@ services:
     ports:
       - "127.0.0.1:${PRODUCTION_FRONTEND_PORT:?PRODUCTION_FRONTEND_PORT is required}:80"
     networks:
-      - backend-net
+      backend-net:
+        aliases:
+          - jiabei-production-frontend
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 15s
