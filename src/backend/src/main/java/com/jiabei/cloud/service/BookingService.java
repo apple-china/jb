@@ -86,8 +86,14 @@ public class BookingService {
 
   public Map<String,Object> adminAvailability(CurrentUser actor,LocalDate date,UUID makeupArtistId,UUID appointmentId){
     requireProxyActor(actor);
-    if(appointmentId!=null){Map<String,Object> appointment=jdbc.queryForMap("SELECT booking_date,makeup_artist_id FROM appointment WHERE id=?",appointmentId);if(actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(appointment.get("makeup_artist_id")))throw BusinessException.forbidden();if(!date.equals(appointment.get("booking_date")))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"BOOKING_DATE_IMMUTABLE","预约日期不可修改。");}
+    if(appointmentId!=null){Map<String,Object> appointment=jdbc.queryForMap("SELECT booking_date,makeup_artist_id FROM appointment WHERE id=?",appointmentId);if(actor.role()==CurrentUser.Role.MAKEUP&&!actor.makeupArtistId().equals(appointment.get("makeup_artist_id")))throw BusinessException.forbidden();if(!date.equals(jdbcLocalDate(appointment.get("booking_date"))))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"BOOKING_DATE_IMMUTABLE","预约日期不可修改。");}
     return availability(actor,date,makeupArtistId,appointmentId);
+  }
+
+  static LocalDate jdbcLocalDate(Object value){
+    if(value instanceof LocalDate date)return date;
+    if(value instanceof java.sql.Date date)return date.toLocalDate();
+    throw new IllegalStateException("Unsupported JDBC date value: "+(value==null?"null":value.getClass().getName()));
   }
 
   public Map<String,Object> adminBookingOptions(CurrentUser actor,LocalDate date,UUID appointmentId){
