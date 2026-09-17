@@ -24,6 +24,18 @@ Assert-Contains $compose 'VITE_DINGTALK_AUTO_LOGIN: ${DINGTALK_ENABLED:-false}' 
 Assert-Contains $compose 'DINGTALK_ENABLED: ${DINGTALK_ENABLED:-false}' 'Production DingTalk integration must default to disabled.'
 Assert-Contains $compose 'MOREDIAN_ENABLED: ${MOREDIAN_ENABLED:-false}' 'Production Moredian integration must default to disabled.'
 Assert-Contains $compose 'jiabei-production-frontend' 'Production frontend must expose a unique network alias for Nginx.'
+Assert-Contains $compose 'outbound-net' 'Production backend must have a dedicated outbound network for third-party APIs.'
+if ($compose -notmatch '(?ms)^  backend-net:\s*\r?\n    internal: true\s*$') {
+  throw 'The production application/database network must remain internal.'
+}
+$dbBlock = [regex]::Match($compose, '(?ms)^  db:.*?(?=^  backend:)').Value
+$backendBlock = [regex]::Match($compose, '(?ms)^  backend:.*?(?=^  frontend:)').Value
+if ($backendBlock -notmatch '(?ms)^    networks:\s*\r?\n      - backend-net\s*\r?\n      - outbound-net\s*$') {
+  throw 'Only the production backend should attach to the dedicated outbound network.'
+}
+if ($dbBlock -match 'outbound-net') {
+  throw 'The production database must not attach to the outbound network.'
+}
 Assert-Contains $compose 'condition: service_healthy' 'Production dependencies must wait for health checks.'
 Assert-Contains $compose 'restart: unless-stopped' 'Production services must define a restart policy.'
 Assert-Contains $compose 'max-size: 10m' 'Production logs must be size limited.'

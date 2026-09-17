@@ -71,6 +71,7 @@ services:
       - uploads-data:/app/uploads
     networks:
       - backend-net
+      - outbound-net
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/actuator/health"]
       interval: 15s
@@ -118,5 +119,7 @@ volumes:
 networks:
   backend-net:
     internal: true
+  outbound-net:
+    driver: bridge
   db-access-net:
     driver: bridge
