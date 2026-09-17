@@ -90,8 +90,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:${PRODUCTION_FRONTEND_PORT:?PRODUCTION_FRONTEND_PORT is required}:80"
     networks:
       backend-net:
         aliases:

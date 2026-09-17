@@ -16,7 +16,7 @@ Assert-Contains $compose 'PRODUCTION_DATABASE_NAME:?' 'Production database name 
 Assert-Contains $compose 'PRODUCTION_DATABASE_PASSWORD:?' 'Production database password must be required.'
 Assert-Contains $compose 'postgres-data:/var/lib/postgresql/data' 'Production database must use its own named volume.'
 Assert-Contains $compose 'uploads-data:/app/uploads' 'Production uploads must use their own named volume.'
-Assert-Contains $compose '127.0.0.1:${PRODUCTION_FRONTEND_PORT:?' 'Production frontend must bind to a configurable loopback port.'
+if ($compose -match '(?m)^\s+ports:\s*$') { throw 'Production services must not publish host ports.' }
 Assert-Contains $compose 'VITE_ENABLE_MOCK_LOGIN: "false"' 'Production frontend must disable mock login.'
 Assert-Contains $compose 'VITE_DINGTALK_AUTO_LOGIN: "false"' 'Production frontend must not enable DingTalk auto login yet.'
 Assert-Contains $compose 'jiabei-production-frontend' 'Production frontend must expose a unique network alias for Nginx.'

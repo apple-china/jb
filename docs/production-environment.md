@@ -13,9 +13,9 @@
 | 数据库用户 | 测试环境用户 | `jiabei_production` |
 | 数据卷 | 测试专用卷 | `jiabei-production_postgres-data` |
 | 上传卷 | 测试专用卷 | `jiabei-production_uploads-data` |
-| 宿主机入口 | 现有测试入口 | `127.0.0.1:5180`（默认，可配置） |
+| Nginx 上游 | `frontend:80` | `jiabei-production-frontend:80` |
 
-生产数据库不映射宿主机端口，数据库、后端和前端只通过生产专用内部网络通信。前端仅绑定宿主机回环地址，后续由反向代理连接；不得直接开放到公网。
+生产数据库、后端和前端均不映射宿主机端口，只通过生产专用内部网络通信。Nginx 后续加入该网络，并通过唯一别名 `jiabei-production-frontend` 访问前端；生产服务不得直接开放到公网。
 
 ## 第一阶段仓库验证
 
@@ -42,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/production-dep
 2. 为数据库密码和首次超管密码生成独立强密码；不得复用测试环境凭据。
 3. 先执行 `docker compose ... config --quiet`，核对项目名、端口、网络和卷，再构建生产镜像。
 4. 创建空生产库并运行 `classpath:db/migration`；不得加载 `db/local` 或 `db/dingtalk-test`。
-5. 通过回环端口完成健康检查和业务验收。钉钉及魔点字段保持为空，真实集成继续禁用。
+5. 在生产 Docker 网络内完成健康检查和业务验收。钉钉及魔点字段保持为空，真实集成继续禁用。
 6. 验收后等待负责人确认，才可重置生产数据库、修改反向代理并将 `jbei.huixinghub.top` 切换到新环境。
 
 ## 回滚边界
