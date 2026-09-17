@@ -1,10 +1,13 @@
 package com.jiabei.cloud.integration;
 
+import jakarta.annotation.PostConstruct;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-@Profile("dingtalk-test")
+@Profile({"dingtalk-test", "production"})
+@ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 @ConfigurationProperties(prefix = "jiabei.dingtalk")
 public class DingTalkProperties {
@@ -25,9 +28,12 @@ public class DingTalkProperties {
   public long getSyncIntervalMs() { return syncIntervalMs; }
   public void setSyncIntervalMs(long syncIntervalMs) { this.syncIntervalMs = syncIntervalMs; }
 
+  @PostConstruct
+  void validateEnabledConfiguration() { requireCredentials(); }
+
   public void requireCredentials() {
     if (clientId == null || clientId.isBlank() || clientSecret == null || clientSecret.isBlank()) {
-      throw new IllegalStateException("DingTalk test credentials are not configured");
+      throw new IllegalStateException("DingTalk credentials are not configured");
     }
   }
 }

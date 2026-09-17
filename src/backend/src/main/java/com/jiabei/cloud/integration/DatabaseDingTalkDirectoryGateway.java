@@ -2,12 +2,14 @@ package com.jiabei.cloud.integration;
 
 import java.util.List;
 import java.util.Locale;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /** Account pickers read the last complete local snapshot, so they do not depend on live API latency. */
-@Profile("dingtalk-test")
+@Profile({"dingtalk-test", "production"})
+@ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DatabaseDingTalkDirectoryGateway implements DingTalkDirectoryGateway {
   private final JdbcTemplate jdbc;
