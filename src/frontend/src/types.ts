@@ -3,10 +3,11 @@ export type AppointmentStatus = 'ACTIVE' | 'CANCELLED'
 export type AttendanceStatus = 'PENDING' | 'ARRIVED' | 'NOT_ARRIVED' | 'LATE'
 export interface CurrentUser { userId:string;dingTalkUserId?:string;dingTalkUsername?:string;nickname:string;role:Role;makeupArtistId?:string;canModifyAppointments:boolean;canCancelAppointments:boolean;canCreateAppointments:boolean;mustChangePassword:boolean;csrfToken:string;testMode?:boolean }
 export interface MakeupArtist { id:string;name:string;avatarUrl?:string;workDays?:number[];workStart?:string;workEnd?:string;scheduleEnabled?:boolean;active?:boolean;attending?:boolean;version?:number;updatedAt?:string }
-export interface Team { id:string;name:string;logoUrl?:string;active?:boolean;version?:number;updatedAt?:string }
+export interface Team { id:string;teamNo?:number|null;name:string;logoUrl?:string;active?:boolean;version?:number;updatedAt?:string }
 export interface Appointment { id:string;bookingNumber?:string;bookingDate:string;startTime:string;streamerName:string;makeupArtistId:string;makeupArtistName:string;teamId:string;teamName:string;status:AppointmentStatus;attendanceStatus:AttendanceStatus;attendanceFrozen?:boolean;attendanceEvidenceAt?:string;conflictOverride?:boolean;version:number;changed?:boolean;selfOperationAllowed?:boolean;resourceModificationAllowed?:boolean;timeModificationAllowed?:boolean }
-export interface AnalyticsSummary {total:number;active:number;cancelled:number;late:number;notArrived:number;modifications:number;cancellations:number;averageLateMinutes:number}
-export interface AnalyticsData {startDate:string;endDate:string;summary:AnalyticsSummary;daily:Array<{date:string;total:number;late:number;notArrived:number}>;streamers:Array<{streamerId:string;streamerName:string;appointments:number;late:number;notArrived:number;modifications:number;cancellations:number}>}
+export interface AnalyticsSummary {total:number;active:number;cancelled:number;arrived:number;late:number;notArrived:number;modifications:number;cancellations:number;averageEarlyMinutes:number;averageLateMinutes:number}
+export interface AnalyticsDay {date:string;total:number;active:number;cancelled:number;arrived:number;late:number;notArrived:number}
+export interface AnalyticsData {startDate:string;endDate:string;summary:AnalyticsSummary;daily:AnalyticsDay[];streamers:Array<{streamerId:string;streamerName:string;appointments:number;late:number;notArrived:number;modifications:number;cancellations:number}>;makeupArtists:Array<{makeupArtistId:string;makeupArtistName:string;activeAppointments:number}>;teams:Array<{teamId:string;teamName:string;activeAppointments:number}>}
 export interface BookingOptions {streamers:Array<{userId:string;nickname:string}>;makeupArtists:MakeupArtist[];teams:Team[]}
 export interface BookingContext {
   selectedDate:string;recommendedDate:string;writeEnabled:boolean;myAppointment:Appointment|null;cancelledAppointments:Appointment[]

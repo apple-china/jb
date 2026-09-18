@@ -22,6 +22,11 @@ const visible = ref(false)
       :placeholder="placeholder"
       :maxlength="maxlength"
       :name="name ?? 'password'"
+      data-lpignore="true"
+      data-1p-ignore
+      data-bwignore="true"
+      autocapitalize="off"
+      :spellcheck="false"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
     <button

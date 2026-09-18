@@ -155,13 +155,28 @@ public class BookingService {
   /**
    * 返回管理端详情所需的扁平数据，同时保留原始 audits 兼容旧客户端。
    * 代预约人优先使用创建审计中的姓名快照，避免账号改名后历史记录漂移。
-   */
+  */
   public Map<String,Object> detail(CurrentUser actor,UUID id){
-    Appointment a=appointment(id);if(actor.role()==CurrentUser.Role.MAKEUP&&!a.makeupArtistId().equals(actor.makeupArtistId()))throw BusinessException.forbidden();
-    List<Map<String,Object>> rows=jdbc.query("SELECT a.*,coalesce(u.dingtalk_user_id,u.username,u.id::text) identity,(SELECT count(*) FROM appointment p WHERE p.booking_date=a.booking_date AND (p.created_at<a.created_at OR (p.created_at=a.created_at AND p.id<=a.id))) daily_sequence FROM appointment a JOIN app_user u ON u.id=a.streamer_user_id WHERE a.id=?",this::appointmentMap,id);
-    Map<String,Object> m=new LinkedHashMap<>(rows.stream().findFirst().orElseThrow());
-    Map<String,Object> metadata=jdbc.queryForMap("SELECT a.source,a.created_at,a.updated_at,a.cancelled_at,a.cancel_reason,coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,canceller.nickname cancelled_by_name FROM appointment a LEFT JOIN app_user creator ON creator.id=a.created_by_user_id LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id LEFT JOIN LATERAL (SELECT actor_name_snapshot FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE' ORDER BY created_at LIMIT 1) create_audit ON true WHERE a.id=?",id);
-    m.put("source",metadata.get("source"));m.put("createdAt",metadata.get("created_at"));m.put("updatedAt",metadata.get("updated_at"));m.put("createdByName",metadata.get("created_by_name"));m.put("cancelledAt",metadata.get("cancelled_at"));m.put("cancelReason",metadata.get("cancel_reason"));m.put("cancelledByName",metadata.get("cancelled_by_name"));
+    List<Map<String,Object>> rows=jdbc.query("""
+        SELECT a.*,coalesce(u.dingtalk_user_id,u.username,u.id::text) identity,
+          (SELECT count(*) FROM appointment p WHERE p.booking_date=a.booking_date
+            AND (p.created_at<a.created_at OR (p.created_at=a.created_at AND p.id<=a.id))) daily_sequence,
+          coalesce(create_audit.actor_name_snapshot,creator.nickname) created_by_name,
+          canceller.nickname cancelled_by_name
+        FROM appointment a
+        JOIN app_user u ON u.id=a.streamer_user_id
+        LEFT JOIN app_user creator ON creator.id=a.created_by_user_id
+        LEFT JOIN app_user canceller ON canceller.id=a.cancelled_by_user_id
+        LEFT JOIN LATERAL (
+          SELECT actor_name_snapshot FROM audit_log
+          WHERE entity_type='APPOINTMENT' AND entity_id=a.id AND action='CREATE'
+          ORDER BY created_at LIMIT 1
+        ) create_audit ON true
+        WHERE a.id=?
+        """,(rs,n)->{Map<String,Object> row=appointmentMap(rs,n);row.put("source",rs.getString("source"));row.put("updatedAt",rs.getObject("updated_at"));row.put("createdByName",rs.getString("created_by_name"));row.put("cancelledAt",rs.getObject("cancelled_at"));row.put("cancelReason",rs.getString("cancel_reason"));row.put("cancelledByName",rs.getString("cancelled_by_name"));return row;},id);
+    if(rows.isEmpty())throw notFound();
+    Map<String,Object> m=new LinkedHashMap<>(rows.getFirst());
+    if(actor.role()==CurrentUser.Role.MAKEUP&&!Objects.equals(m.get("makeupArtistId"),actor.makeupArtistId()))throw BusinessException.forbidden();
     List<Map<String,Object>> audits=jdbc.query("SELECT action,actor_name_snapshot,reason,before_data,after_data,created_at FROM audit_log WHERE entity_type='APPOINTMENT' AND entity_id=? ORDER BY created_at DESC",(rs,n)->{Map<String,Object>x=new LinkedHashMap<>();x.put("action",rs.getString(1));x.put("actorName",rs.getString(2));x.put("reason",rs.getString(3));x.put("before",rs.getString(4));x.put("after",rs.getString(5));x.put("createdAt",rs.getObject(6,OffsetDateTime.class));return x;},id);
     m.put("audits",audits);m.put("modifications",audits.stream().filter(x->"MODIFY".equals(x.get("action"))).map(this::modificationView).toList());return m;
   }

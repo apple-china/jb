@@ -43,6 +43,12 @@ class SessionServiceTest {
     assertThat(SessionService.requiresPasswordChange(CurrentUser.Role.STREAMER,false)).isFalse();
   }
 
+  @Test void forcedPasswordChangeOnlyAppliesToPasswordSessions(){
+    SessionService.UserRow row=new SessionService.UserRow(UUID.randomUUID(),"streamer01","hash","ding01","主播",CurrentUser.Role.STREAMER,null,true,false,false,false,true,0);
+    assertThat(row.current("csrf",true).mustChangePassword()).isTrue();
+    assertThat(row.current("csrf",false).mustChangePassword()).isFalse();
+  }
+
   @Test void makeupCreatePermissionFollowsStoredFlag(){
     CurrentUser denied=new CurrentUser(UUID.randomUUID(),"makeup01","makeup01","化妆师",CurrentUser.Role.MAKEUP,UUID.randomUUID(),false,false,false,false,"csrf");
     CurrentUser allowed=new CurrentUser(UUID.randomUUID(),"makeup02","makeup02","化妆师",CurrentUser.Role.MAKEUP,UUID.randomUUID(),false,false,true,false,"csrf");
