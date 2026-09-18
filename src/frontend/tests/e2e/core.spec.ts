@@ -189,7 +189,7 @@ test('settings use first character avatars, counts and icon expanders',async({pa
   await page.goto('/admin')
   await page.locator('button:visible').filter({hasText:/^设置$/}).click()
   const makeupCard=page.locator('.setting-card').filter({has:page.getByRole('heading',{name:'化妆师',exact:true})})
-  await expect(makeupCard.locator('img.mini-avatar').first()).toHaveAttribute('src',/\.webp$/)
+  await expect(makeupCard.locator('img.mini-avatar').first()).toHaveAttribute('src',/\.webp(?:\?|$)/)
   await expect(makeupCard).toContainText('启用2/2')
   await expect(page.getByText('休息中···',{exact:true})).toBeVisible()
   await expect(page.getByText('已启用',{exact:true})).toHaveCount(0)
