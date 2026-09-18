@@ -44,9 +44,11 @@ public class AccountService {
                is_active,is_attending,can_modify_appointments,can_cancel_appointments,
                can_create_appointments,must_change_password,version,updated_at,last_login_at
         FROM app_user
-        ORDER BY is_active DESC,
-          CASE role WHEN 'SUPER_ADMIN' THEN 1 WHEN 'OPERATOR' THEN 2 WHEN 'OBSERVER' THEN 3
-                    WHEN 'MAKEUP' THEN 4 WHEN 'STREAMER' THEN 5 ELSE 6 END,
+        ORDER BY CASE
+          WHEN NOT is_active THEN 2
+          WHEN role IN ('MAKEUP','STREAMER') AND NOT is_attending THEN 1
+          ELSE 0
+        END,
           updated_at DESC,id
         """,(rs,n)->{
       Map<String,Object> m=new LinkedHashMap<>();
@@ -136,7 +138,7 @@ public class AccountService {
       if(count!=null&&count==0){username=candidate;break;}
     }
     if(username==null)throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_NAME_GENERATION_FAILED","账号生成冲突，请重试。");
-    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=false,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode("123456"),id);
+    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=true,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode("123456"),id);
     audit(id,"PASSWORD_ASSIGNED",actor,Map.of("username",username),trace);
     return Map.of("username",username,"password","123456");
   }

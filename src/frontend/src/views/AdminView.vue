@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { BarChart3, BookOpen, CalendarPlus, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ImagePlus, KeyRound, Plus, RotateCcw, Send, Settings2, SlidersHorizontal, UserCog, UsersRound, X } from 'lucide-vue-next'
 import AppDatePicker from '../components/AppDatePicker.vue'
@@ -18,9 +18,9 @@ import { avatarInitial } from '../utils/display'
 import { dateRangePreset, type RangePreset } from '../utils/dateRanges'
 import { formatLastSeen } from '../utils/lastSeen'
 import { restoreSession, signOut } from '../auth'
-import makeupAvatar from '../assets/化妆师.png'
-import streamerAvatar from '../assets/主播.png'
-import systemAvatar from '../assets/系统人员.png'
+import makeupAvatar from '../assets/化妆师.webp'
+import streamerAvatar from '../assets/主播.webp'
+import systemAvatar from '../assets/系统人员.webp'
 
 const router = useRouter()
 const route = useRoute()
@@ -49,6 +49,11 @@ const pageSize = ref(30)
 const total = ref(0)
 const totalPages = ref(0)
 const detail = ref<any>(null)
+const appointmentsLoading = ref(false)
+const appointmentsRefreshing = ref(false)
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detailError = ref('')
 const action = ref<'modify' | 'cancel' | null>(null)
 const rulesOpen = ref(false)
 const logoutOpen = ref(false)
@@ -69,8 +74,9 @@ const overlapConfirmAction = ref<'create'|'modify'|null>(null)
 const analytics = ref<AnalyticsData|null>(null)
 const analyticsLoading = ref(false)
 const analyticsRange = ref({startDate:shanghaiDate(-29),endDate:shanghaiDate()})
-const analyticsPreset = ref<'today'|'7d'|'30d'|'month'|'custom'>('30d')
+const analyticsPreset = ref<'today'|'7d'|'30d'|'90d'|'month'|'custom'>('30d')
 const rankingMetric = ref<'appointments'|'late'|'notArrived'|'modifications'|'cancellations'>('appointments')
+const trendMetric = ref<'total'|'arrived'|'late'|'notArrived'|'active'|'cancelled'>('total')
 const resourceEditor = ref<{ kind: 'makeupArtist' | 'team'; item: any | null } | null>(null)
 const resourceForm = ref<any>({})
 const accountEditor = ref<any | null>(null)
@@ -87,6 +93,8 @@ const revokePasswordOpen = ref(false)
 const expandedSections = ref<Record<string, boolean>>({})
 let createAvailabilityRequest=0
 let editAvailabilityRequest=0
+let appointmentPoll:number|undefined
+let touchStart:{x:number;y:number;interactive:boolean}|null=null
 
 const isAdmin = computed(() => user.value?.role === 'SUPER_ADMIN' || user.value?.role === 'OPERATOR')
 const canAnalytics = computed(() => ['SUPER_ADMIN','OPERATOR','OBSERVER'].includes(user.value?.role ?? ''))
@@ -104,7 +112,11 @@ const teamOptions = computed(() => teams.value.filter(x => x.active).map(x => ({
 const createMakeupOptions = computed(() => (bookingOptions.value?.makeupArtists ?? []).map(x=>({value:x.id,label:x.name})))
 const createTeamOptions = computed(() => (bookingOptions.value?.teams ?? []).map(x=>({value:x.id,label:x.name})))
 const rankedStreamers = computed(() => [...(analytics.value?.streamers ?? [])].sort((a,b)=>b[rankingMetric.value]-a[rankingMetric.value]||b.appointments-a.appointments).slice(0,10))
-const analyticsMetrics = computed(()=>analytics.value?[{l:'总预约',v:analytics.value.summary.total,s:''},{l:'有效',v:analytics.value.summary.active,s:''},{l:'已取消',v:analytics.value.summary.cancelled,s:''},{l:'迟到',v:analytics.value.summary.late,s:''},{l:'未到',v:analytics.value.summary.notArrived,s:''},{l:'修改次数',v:analytics.value.summary.modifications,s:''},{l:'取消次数',v:analytics.value.summary.cancellations,s:''},{l:'平均迟到',v:analytics.value.summary.averageLateMinutes,s:'分钟'}]:[])
+const analyticsMetrics = computed(()=>analytics.value?[{l:'预约',v:analytics.value.summary.total,s:''},{l:'有效',v:analytics.value.summary.active,s:''},{l:'签到',v:analytics.value.summary.arrived,s:''},{l:'取消',v:analytics.value.summary.cancelled,s:''},{l:'迟到',v:analytics.value.summary.late,s:''},{l:'未到',v:analytics.value.summary.notArrived,s:''},{l:'修改次数',v:analytics.value.summary.modifications,s:''},{l:'取消次数',v:analytics.value.summary.cancellations,s:''},{l:'平均提前',v:analytics.value.summary.averageEarlyMinutes,s:'分钟'},{l:'平均迟到',v:analytics.value.summary.averageLateMinutes,s:'分钟'}]:[])
+const checkinRate = computed(()=>{const s=analytics.value?.summary;if(!s)return 0;const n=s.arrived+s.late+s.notArrived;return n?Math.round(s.arrived/n*100):0})
+const rankingOptions = [{value:'appointments',label:'预约数'},{value:'late',label:'迟到数'},{value:'notArrived',label:'未到数'},{value:'modifications',label:'修改次'},{value:'cancellations',label:'取消次'}]
+const trendOptions = [{value:'total',label:'预约'},{value:'arrived',label:'签到'},{value:'late',label:'迟到'},{value:'notArrived',label:'未到'},{value:'active',label:'有效'},{value:'cancelled',label:'取消'}]
+const trendMaximum = computed(()=>Math.max(1,...(analytics.value?.daily??[]).map(day=>day[trendMetric.value])))
 const selectedCreateSlot = computed(()=>createSlots.value.find(slot=>slot.time===createForm.value.startTime))
 const selectedEditSlot = computed(()=>editSlots.value.find(slot=>slot.time===editForm.value.startTime))
 const detailSubtitle = computed(()=>detail.value?.bookingNumber?`No.${String(detail.value.bookingNumber).split('-')[0]}`:'')
@@ -156,7 +168,7 @@ const accountEditorTitle = computed(() => {
 })
 const resourceEditorTitle = computed(() => resourceEditor.value?.item?.name ?? ('添加 ' + (resourceEditor.value?.kind === 'makeupArtist' ? '化妆师' : '团播组')))
 const accountEditorSubtitle = computed(()=>accountEditor.value?.id?[accountEditor.value.dingTalkUserId?`@${accountEditor.value.dingTalkUserId}`:'',formatLastSeen(accountEditor.value.lastLoginAt)].filter(Boolean).join(' · '):'')
-const resourceEditorSubtitle = computed(()=>resourceEditor.value?.item?.id?`ID ${resourceEditor.value.item.id}`:'')
+const resourceEditorSubtitle = computed(()=>resourceEditor.value?.item?(resourceEditor.value.kind==='team'?teamNumber(resourceEditor.value.item):`ID ${resourceEditor.value.item.id}`):'')
 const createReasonOptions = ['无法自行预约', '迟到现场补录', '临时加急安排', '特殊资源协调', '其他特殊情况'].map(value => ({ value, label: value }))
 const weekdays = [{ v: 1, l: '一' }, { v: 2, l: '二' }, { v: 3, l: '三' }, { v: 4, l: '四' }, { v: 5, l: '五' }, { v: 6, l: '六' }, { v: 7, l: '日' }]
 
@@ -169,6 +181,7 @@ function sourceLabel(value?: string) { return value === 'STREAMER' ? '本人预�
 function dateTime(value?: string) { if(!value)return '—';const parts=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(value));const get=(type:string)=>parts.find(p=>p.type===type)?.value??'';return `${get('month')}-${get('day')} ${get('hour')}:${get('minute')}` }
 function roleLabel(value: string) { return ({ SUPER_ADMIN: '超管', OPERATOR: '运营', OBSERVER: '观察员', MAKEUP: '化妆师', STREAMER: '主播' } as Record<string, string>)[value] ?? value }
 function roleAvatarClass(role?: string) { return role === 'STREAMER' ? 'avatar-streamer' : role === 'MAKEUP' ? 'avatar-makeup' : 'avatar-system' }
+function teamNumber(team?:Team){return team?.teamNo?`No.${String(team.teamNo).padStart(6,'0')}`:'No.—'}
 function makeupArtistAccount(makeupArtistId: string) { return accounts.value.find(account => account.makeupArtistId === makeupArtistId) }
 function canTestSwitch(account: any) { return mockLoginEnabled && !!account && !!(account.dingTalkUserId || account.username) }
 async function switchTestAccount(account: any) {
@@ -211,8 +224,10 @@ function appointmentParams(exporting = false) {
   return q
 }
 
-async function loadAppointments() {
+async function loadAppointments(options:{silent?:boolean}={}) {
   if (historical.value && range.value.startDate > range.value.endDate) { showToast('开始日期不能晚于截止日期。', 'warning'); return }
+  if(options.silent)appointmentsRefreshing.value=true
+  else appointmentsLoading.value=true
   try {
     const data = await api.adminAppointments(appointmentParams())
     appointments.value = data.items
@@ -220,7 +235,8 @@ async function loadAppointments() {
     page.value = data.page ?? 1
     pageSize.value = data.size ?? pageSize.value
     totalPages.value = data.totalPages ?? Math.max(1, Math.ceil(total.value / pageSize.value))
-  } catch (error) { showApiError(error, '预约加载失败。') }
+  } catch (error) { if(!options.silent)showApiError(error, '预约加载失败。') }
+  finally { appointmentsLoading.value=false;appointmentsRefreshing.value=false }
 }
 
 function applyPreset(preset: RangePreset) { activePreset.value = preset; range.value = dateRangePreset(preset) }
@@ -269,7 +285,13 @@ async function sendCard() {
     cardDateOpen.value = false; showToast('安排卡片已进入发送队列。', 'success')
   } catch (error) { showApiError(error, '卡片触发失败。') } finally { cardSending.value = false }
 }
-async function openDetail(item: Appointment) { try { detail.value = await api.adminAppointmentDetail(item.id) } catch (error) { showApiError(error, '详情加载失败。') } }
+async function openDetail(item: Appointment) {
+  detail.value=item;detailOpen.value=true;detailLoading.value=true;detailError.value=''
+  try { detail.value = await api.adminAppointmentDetail(item.id) }
+  catch (error) { detailError.value=error instanceof Error?error.message:'详情加载失败。' }
+  finally { detailLoading.value=false }
+}
+function closeDetail(){detailOpen.value=false;detail.value=null;detailError.value=''}
 async function openAction(kind: 'modify' | 'cancel', item: any) { detail.value = item; action.value = kind; editForm.value = { makeupArtistId: item.makeupArtistId, teamId: item.teamId, startTime: item.startTime, reason: '' };if(kind==='modify'){try{bookingOptions.value=await api.adminBookingOptions(item.bookingDate,item.id);await loadEditAvailability()}catch(error){showApiError(error,'可修改资源加载失败。')}} }
 async function loadEditAvailability(){const request=++editAvailabilityRequest;if(!detail.value||!editForm.value.makeupArtistId){editSlots.value=[];return}const appointmentId=detail.value.id,date=detail.value.bookingDate,artistId=editForm.value.makeupArtistId;try{const result=await api.adminAvailability(date,artistId,appointmentId);if(request!==editAvailabilityRequest)return;editSlots.value=result.slots;if(!result.slots.some(slot=>slot.available&&slot.time===editForm.value.startTime))editForm.value.startTime=''}catch(error){if(request!==editAvailabilityRequest)return;editSlots.value=[];showApiError(error,'可预约时间加载失败。')}}
 async function runAction() {
@@ -282,7 +304,7 @@ async function executeAction(){
   try {
     if (action.value === 'modify') await api.adminUpdate(detail.value.id, { ...editForm.value, version: detail.value.version })
     else await api.adminCommand(`${detail.value.id}/cancel`, { version: detail.value.version, reason: editForm.value.reason })
-    showToast(action.value === 'modify' ? '预约已修改。' : '预约已取消。', 'success'); action.value = null; detail.value = null; await loadAppointments()
+    showToast(action.value === 'modify' ? '预约已修改。' : '预约已取消。', 'success'); action.value = null; detailOpen.value = false; detail.value = null; await loadAppointments()
   } catch (error) { showApiError(error, '操作失败。') }
 }
 async function adminCreate() {
@@ -299,7 +321,7 @@ async function executeCreate(){
   } catch (error) { showApiError(error, '代预约失败。') }
 }
 async function confirmOverlap(){const pending=overlapConfirmAction.value;overlapConfirmAction.value=null;if(pending==='create')await executeCreate();else if(pending==='modify')await executeAction()}
-function analyticsPresetRange(preset:'today'|'7d'|'30d'|'month'){analyticsPreset.value=preset;const now=shanghaiDate();if(preset==='today')analyticsRange.value={startDate:now,endDate:now};else if(preset==='month')analyticsRange.value={startDate:`${now.slice(0,7)}-01`,endDate:now};else analyticsRange.value={startDate:shanghaiDate(preset==='7d'?-6:-29),endDate:now};void loadAnalytics()}
+function analyticsPresetRange(preset:'today'|'7d'|'30d'|'90d'|'month'){analyticsPreset.value=preset;const now=shanghaiDate();if(preset==='today')analyticsRange.value={startDate:now,endDate:now};else if(preset==='month')analyticsRange.value={startDate:`${now.slice(0,7)}-01`,endDate:now};else analyticsRange.value={startDate:shanghaiDate(preset==='7d'?-6:preset==='30d'?-29:-89),endDate:now};void loadAnalytics()}
 async function loadAnalytics(){if(!canAnalytics.value)return;analyticsLoading.value=true;try{analytics.value=await api.adminAnalytics(analyticsRange.value.startDate,analyticsRange.value.endDate)}catch(error){showApiError(error,'统计数据加载失败。')}finally{analyticsLoading.value=false}}
 async function loadResources() {
   try {
@@ -448,11 +470,25 @@ async function revokePassword() {
   catch (error) { showApiError(error, '密码回收失败。') }
 }
 async function logout() { await signOut(); await router.replace('/login') }
-watch(dateMode,async()=>{createForm.value.streamerUserId='';createForm.value.makeupArtistId=user.value?.role==='MAKEUP'?user.value.makeupArtistId??'':'';createForm.value.teamId='';createForm.value.startTime='';await loadBookingOptions();await loadCreateAvailability()})
+watch(dateMode,async()=>{
+  const previous={...createForm.value}
+  await loadBookingOptions()
+  createForm.value.streamerUserId=(bookingOptions.value?.streamers??[]).some(x=>x.userId===previous.streamerUserId)?previous.streamerUserId:''
+  createForm.value.makeupArtistId=user.value?.role==='MAKEUP'?user.value.makeupArtistId??'':(bookingOptions.value?.makeupArtists??[]).some(x=>x.id===previous.makeupArtistId)?previous.makeupArtistId:''
+  createForm.value.teamId=(bookingOptions.value?.teams??[]).some(x=>x.id===previous.teamId)?previous.teamId:''
+  createForm.value.startTime=previous.startTime
+  createForm.value.reason=previous.reason
+  await loadCreateAvailability()
+})
 watch(()=>createForm.value.makeupArtistId,loadCreateAvailability)
 watch(()=>editForm.value.makeupArtistId,()=>{if(action.value==='modify')void loadEditAvailability()})
 watch(()=>route.query.tab,value=>{if(value==='appointments'||value==='create'||value==='analytics'||value==='settings')tab.value=value})
-onMounted(init)
+function canPollAppointments(){return tab.value==='appointments'&&document.visibilityState==='visible'}
+function refreshAppointmentsOnReturn(){if(canPollAppointments())void loadAppointments({silent:true})}
+function onAppointmentTouchStart(event:TouchEvent){const target=event.target as HTMLElement;touchStart={x:event.touches[0].clientX,y:event.touches[0].clientY,interactive:!!target.closest('button,input,select,textarea,a,[role="button"],.sheet')}}
+function onAppointmentTouchEnd(event:TouchEvent){if(!touchStart||touchStart.interactive||filterApplied.value){touchStart=null;return}const dx=event.changedTouches[0].clientX-touchStart.x,dy=event.changedTouches[0].clientY-touchStart.y;touchStart=null;if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.3)return;if(dx<0&&filterDate.value!==shanghaiDate(1))void selectAppointmentDate(shanghaiDate(1));else if(dx>0&&filterDate.value!==shanghaiDate())void selectAppointmentDate(shanghaiDate())}
+onMounted(async()=>{await init();appointmentPoll=window.setInterval(()=>{if(canPollAppointments())void loadAppointments({silent:true})},30_000);document.addEventListener('visibilitychange',refreshAppointmentsOnReturn);window.addEventListener('focus',refreshAppointmentsOnReturn)})
+onBeforeUnmount(()=>{if(appointmentPoll)window.clearInterval(appointmentPoll);document.removeEventListener('visibilitychange',refreshAppointmentsOnReturn);window.removeEventListener('focus',refreshAppointmentsOnReturn)})
 </script>
 
 <template>
@@ -473,7 +509,7 @@ onMounted(init)
     <section class="admin-main">
       <div v-if="loading" class="loading-state"><span /><span /><span /></div>
       <template v-else>
-        <section v-if="tab === 'appointments'" class="record-shell">
+        <section v-if="tab === 'appointments'" class="record-shell" @touchstart.passive="onAppointmentTouchStart" @touchend.passive="onAppointmentTouchEnd">
           <DateTabs :model-value="filterApplied ? '' : filterDate" :options="appointmentDates" @update:model-value="selectAppointmentDate" />
           <div class="record-results">
             <div class="record-total">共 <b>{{ total }}</b> 条记录</div>
@@ -500,64 +536,66 @@ onMounted(init)
             </div>
             <div class="record-filter-foot"><button class="button secondary" @click="clearFilters">重置</button><button class="button primary" @click="applyFilters">查询</button></div>
           </div>
-          <div v-if="appointments.length" class="desktop-table">
+          <div v-if="appointmentsLoading && !appointments.length" class="appointment-skeleton" aria-label="预约列表加载中"><span v-for="n in 4" :key="n" /></div>
+          <div v-if="!appointmentsLoading && appointments.length" class="desktop-table" :class="{'is-refreshing':appointmentsRefreshing}">
             <table><thead><tr><th>日期</th><th>时间</th><th>主播</th><th>团播组</th><th>化妆师</th><th>签到</th><th>状态</th><th /></tr></thead>
               <tbody><tr v-for="item in appointments" :key="item.id"><td>{{ item.bookingDate }}</td><td><strong><TimeText :value="item.startTime" /></strong><small v-if="item.conflictOverride" class="overlap-badge">时间重叠</small></td><td>{{ item.streamerName }}</td><td>{{ item.teamName }}</td><td>{{ item.makeupArtistName }}</td><td><span class="attendance-badge" :class="item.attendanceStatus.toLowerCase()">{{ attendanceLabel(item.attendanceStatus) }}</span></td><td><span class="status" :class="item.status.toLowerCase()">{{ statusLabel(item.status) }}</span></td><td><button class="icon-button" aria-label="查看预约详情" @click="openDetail(item)"><ChevronRight :size="18" /></button></td></tr></tbody>
             </table>
           </div>
-          <div v-if="appointments.length" class="mobile-admin-list">
+          <div v-if="!appointmentsLoading && appointments.length" class="mobile-admin-list" :class="{'is-refreshing':appointmentsRefreshing}">
             <button v-for="item in appointments" :key="item.id" @click="openDetail(item)">
               <span><TimeText :value="item.startTime" /><small class="mobile-record-date">{{ shortDate(item.bookingDate) }}</small></span>
               <span><b>{{ item.streamerName }}</b><small>{{ item.makeupArtistName }} · {{ item.teamName }}</small><small v-if="item.conflictOverride" class="overlap-badge">时间重叠</small></span>
               <span class="mobile-status-stack"><em class="attendance-badge" :class="item.attendanceStatus.toLowerCase()">{{ attendanceLabel(item.attendanceStatus) }}</em><em class="status" :class="item.status.toLowerCase()">{{ statusLabel(item.status) }}</em></span>
             </button>
           </div>
-          <div v-else class="empty-records">当前条件下暂无预约记录</div>
+          <div v-else-if="!appointmentsLoading" class="empty-records">当前条件下暂无预约记录</div>
           <div v-if="total > 30" class="pager" aria-label="分页">
             <button class="page-button" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button><span>第 {{ page }} / {{ totalPages }} 页</span><button class="page-button" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
             <select v-model.number="pageSize" class="page-size" aria-label="每页条数" @change="changePageSize"><option :value="30">30条/页</option><option :value="50">50条/页</option><option :value="100">100条/页</option></select>
           </div>
         </section>
-        <section v-else-if="tab === 'create'" class="admin-form-card">
+        <section v-else-if="tab === 'create'" class="admin-form-card create-form-card">
           <div class="form-grid">
             <div class="admin-date-field"><span>预约日期</span><div class="admin-date-choice"><button v-for="option in [{ value: 'today', label: '今天' }, { value: 'tomorrow', label: '明天' }]" :key="option.value" type="button" :class="{ active: dateMode === option.value }" @click="selectCreateDate(option.value as 'today' | 'tomorrow')"><b>{{ option.label }}</b><small>{{ option.value === 'today' ? shanghaiDate() : shanghaiDate(1) }}</small></button></div><small v-if="!dateMode" class="field-hint">请先选择预约日期</small></div>
             <label><span>主播</span><PolishedSelect v-model="createForm.streamerUserId" :options="createStreamerOptions" placeholder="请选择主播" aria-label="主播" /></label>
             <label v-if="user?.role !== 'MAKEUP'"><span>化妆师</span><PolishedSelect v-model="createForm.makeupArtistId" :options="createMakeupOptions" placeholder="请选择化妆师" aria-label="化妆师" /></label>
             <label><span>团播组</span><PolishedSelect v-model="createForm.teamId" :options="createTeamOptions" placeholder="请选择团播组" aria-label="团播组" /></label>
-            <label class="wide"><span>时间</span><TimeWheel v-if="createSlots.length" v-model="createForm.startTime" :slots="createSlots" /><div v-else class="time-wheel-empty">选择化妆师后即可查看可预约时间</div><small v-if="selectedCreateSlot?.conflict" class="conflict-warning">该时段与已有预约重叠，提交前需要再次确认。</small></label>
             <label class="wide reason-field"><span>代预约原因（可选）</span><PolishedSelect v-model="createForm.reason" :options="createReasonOptions" placeholder="请选择原因" aria-label="代预约原因" /></label>
+            <label class="wide"><span>时间</span><TimeWheel v-if="createSlots.length" v-model="createForm.startTime" :slots="createSlots" /><div v-else class="time-wheel-empty">请先选择化妆师</div><small v-if="selectedCreateSlot?.conflict" class="conflict-warning">该时段与已有预约重叠，提交前需要再次确认。</small></label>
           </div>
           <button class="button primary admin-create-submit" :disabled="!selectedDate || !createForm.streamerUserId || (!createForm.makeupArtistId && user?.role !== 'MAKEUP') || !createForm.startTime || !createForm.teamId" @click="adminCreate">确认代预约</button>
         </section>
         <section v-else-if="tab === 'analytics'" class="analytics-page">
-          <header class="analytics-toolbar"><div><h1>数据分析</h1><p>{{ analyticsRange.startDate }} 至 {{ analyticsRange.endDate }}</p></div><div class="analytics-presets"><button :class="{active:analyticsPreset==='today'}" @click="analyticsPresetRange('today')">今日</button><button :class="{active:analyticsPreset==='7d'}" @click="analyticsPresetRange('7d')">近7天</button><button :class="{active:analyticsPreset==='30d'}" @click="analyticsPresetRange('30d')">近30天</button><button :class="{active:analyticsPreset==='month'}" @click="analyticsPresetRange('month')">本月</button></div></header>
+          <header class="analytics-toolbar"><div class="analytics-presets"><button :class="{active:analyticsPreset==='today'}" @click="analyticsPresetRange('today')">今日</button><button :class="{active:analyticsPreset==='month'}" @click="analyticsPresetRange('month')">本月</button><button :class="{active:analyticsPreset==='7d'}" @click="analyticsPresetRange('7d')">近7天</button><button :class="{active:analyticsPreset==='30d'}" @click="analyticsPresetRange('30d')">近30天</button><button :class="{active:analyticsPreset==='90d'}" @click="analyticsPresetRange('90d')">近90天</button></div></header>
           <div class="analytics-custom"><AppDatePicker v-model="analyticsRange.startDate" label="统计开始日期" @update:model-value="analyticsPreset='custom'"/><AppDatePicker v-model="analyticsRange.endDate" label="统计截止日期" @update:model-value="analyticsPreset='custom'"/><button class="button primary" @click="loadAnalytics">查询</button></div>
           <div v-if="analyticsLoading" class="loading-state"><span/><span/></div>
           <template v-else-if="analytics">
-            <div class="metric-grid"><article v-for="item in analyticsMetrics" :key="item.l"><span>{{ item.l }}</span><b>{{ item.v }}</b><small v-if="item.s">{{ item.s }}</small></article></div>
-            <div v-if="analytics.summary.total>=5" class="analytics-grid">
-              <article class="analytics-card"><h2>预约状态</h2><div class="donut" :style="{'--value':`${analytics.summary.total?analytics.summary.active/analytics.summary.total*100:0}%`}"><b>{{ Math.round(analytics.summary.total?analytics.summary.active/analytics.summary.total*100:0) }}%</b><small>有效率</small></div><div class="legend"><span><i class="active"/>有效 {{ analytics.summary.active }}</span><span><i class="cancelled"/>取消 {{ analytics.summary.cancelled }}</span></div></article>
-              <article class="analytics-card"><h2>签到表现</h2><div class="horizontal-bars"><div v-for="item in [{l:'迟到',v:analytics.summary.late,c:'late'},{l:'未到',v:analytics.summary.notArrived,c:'absent'}]" :key="item.l"><span>{{ item.l }}</span><i><b :class="item.c" :style="{width:`${analytics.summary.total?Math.max(4,item.v/analytics.summary.total*100):0}%`}"/></i><strong>{{ item.v }}</strong></div></div></article>
-              <article class="analytics-card analytics-trend"><h2>每日趋势</h2><div class="trend-bars"><i v-for="day in analytics.daily" :key="day.date" :title="`${day.date}：${day.total} 条`" :style="{height:`${Math.max(3,day.total/Math.max(1,...analytics.daily.map(x=>x.total))*100)}%`}"/></div></article>
-              <article class="analytics-card analytics-ranking"><header><h2>主播排行</h2><select v-model="rankingMetric"><option value="appointments">预约次数</option><option value="late">迟到次数</option><option value="notArrived">未到次数</option><option value="modifications">修改次数</option><option value="cancellations">取消次数</option></select></header><ol><li v-for="(row,index) in rankedStreamers" :key="row.streamerId"><em>{{ index+1 }}</em><span>{{ row.streamerName }}</span><b>{{ row[rankingMetric] }}</b><small>预约 {{ row.appointments }} · 迟到 {{ row.late }} · 未到 {{ row.notArrived }} · 修改 {{ row.modifications }} · 取消 {{ row.cancellations }}</small></li></ol></article>
+            <section class="analytics-panel"><h2>数据面板</h2><div class="metric-grid"><article v-for="item in analyticsMetrics" :key="item.l"><span>{{ item.l }}</span><b>{{ item.v }}</b><small v-if="item.s">{{ item.s }}</small></article></div></section>
+            <div class="analytics-grid">
+              <article class="analytics-card"><h2>有效预约</h2><div class="donut" :style="{'--value':`${analytics.summary.total?analytics.summary.active/analytics.summary.total*100:0}%`}"><b>{{ Math.round(analytics.summary.total?analytics.summary.active/analytics.summary.total*100:0) }}%</b><small>有效率</small></div><div class="legend"><span><i class="active"/>有效 {{ analytics.summary.active }}</span><span><i class="cancelled"/>取消 {{ analytics.summary.cancelled }}</span></div></article>
+              <article class="analytics-card"><h2>签到情况</h2><div class="donut attendance-donut" :style="{'--arrived':`${analytics.summary.arrived/Math.max(1,analytics.summary.arrived+analytics.summary.late+analytics.summary.notArrived)*100}%`,'--late':`${(analytics.summary.arrived+analytics.summary.late)/Math.max(1,analytics.summary.arrived+analytics.summary.late+analytics.summary.notArrived)*100}%`}"><b>{{ checkinRate }}%</b><small>签到率</small></div><div class="legend attendance-legend"><span><i class="arrived"/>签到 {{ analytics.summary.arrived }}</span><span><i class="late"/>迟到 {{ analytics.summary.late }}</span><span><i class="absent"/>未到 {{ analytics.summary.notArrived }}</span></div></article>
+              <article class="analytics-card analytics-trend"><header><h2>每日趋势</h2><PolishedSelect v-model="trendMetric" :options="trendOptions" aria-label="趋势指标" /></header><div v-if="analytics.daily.length" class="trend-scroll"><div class="trend-bars" :style="{minWidth:`max(100%, ${analytics.daily.length*26}px)`}"><span v-for="day in analytics.daily" :key="day.date" :title="`${day.date}：${day[trendMetric]} 条`"><i :style="{height:`${Math.max(3,day[trendMetric]/trendMaximum*100)}%`}"/><small>{{ Number(day.date.slice(8)) }}日</small></span></div></div><p v-else class="analytics-empty">暂无数据</p></article>
+              <article class="analytics-card analytics-ranking"><header><h2>BI 主播</h2><PolishedSelect v-model="rankingMetric" :options="rankingOptions" aria-label="主播指标" /></header><ol v-if="rankedStreamers.length"><li v-for="(row,index) in rankedStreamers" :key="row.streamerId"><em>{{ index+1 }}</em><span>{{ row.streamerName }}</span><b>{{ row[rankingMetric] }}</b><small>预约 {{ row.appointments }} · 迟到 {{ row.late }} · 未到 {{ row.notArrived }} · 修改 {{ row.modifications }} · 取消 {{ row.cancellations }}</small></li></ol><p v-else class="analytics-empty">暂无数据</p></article>
+              <article class="analytics-card analytics-ranking"><h2>BI 化妆师</h2><ol v-if="analytics.makeupArtists.length"><li v-for="(row,index) in analytics.makeupArtists" :key="row.makeupArtistId"><em>{{ index+1 }}</em><span>{{ row.makeupArtistName }}</span><b>{{ row.activeAppointments }}</b><small>有效预约</small></li></ol><p v-else class="analytics-empty">暂无数据</p></article>
+              <article class="analytics-card analytics-ranking"><h2>BI 团播组</h2><ol v-if="analytics.teams.length"><li v-for="(row,index) in analytics.teams" :key="row.teamId"><em>{{ index+1 }}</em><span>{{ row.teamName }}</span><b>{{ row.activeAppointments }}</b><small>有效预约</small></li></ol><p v-else class="analytics-empty">暂无数据</p></article>
             </div>
-            <div v-else class="analytics-insufficient">当前区间少于 5 条预约，汇总数据已保留；样本增多后将显示图表和排行。</div>
           </template>
         </section>
         <section v-else class="settings-grid">
           <article class="setting-card"><header><div class="setting-title"><h2>化妆师</h2><small>启用{{ enabledCount(makeupArtists) }}/{{ makeupArtists.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加化妆师" title="添加化妆师" @click="openAccount(null, 'MAKEUP')"><Plus :size="18" /></button></header><ul><li v-for="makeupArtist in visibleRows(makeupArtists, 'makeup')" :key="makeupArtist.id" :class="{ inactive: !makeupArtist.active, 'test-switchable': canTestSwitch(makeupArtistAccount(makeupArtist.id)) }" :tabindex="canTestSwitch(makeupArtistAccount(makeupArtist.id)) ? 0 : undefined" @click="switchTestAccount(makeupArtistAccount(makeupArtist.id))" @keydown.enter="switchTestAccount(makeupArtistAccount(makeupArtist.id))"><img class="mini-avatar avatar-makeup" :src="makeupAvatar" alt="" /><span><b>{{ makeupArtist.name }}</b><small v-if="!makeupArtist.active">已停用</small><small v-else>{{ minute(makeupArtist.workStart) }}–{{ minute(makeupArtist.workEnd) }}{{ makeupArtist.attending ? '' : ' · 休息中···' }}</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`编辑${makeupArtist.name}`" :title="`编辑${makeupArtist.name}`" @click.stop="openMakeupArtistEditor(makeupArtist)"><UserCog :size="17" /></button></li></ul><button v-if="makeupArtists.length > 5" class="section-expander" @click="toggleSection('makeup')"><ChevronUp v-if="expandedSections.makeup" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.makeup ? '收起' : `展开 ${makeupArtists.length - 5} 项` }}</button></article>
           <article class="setting-card"><header><div class="setting-title"><h2>主播</h2><small>启用{{ enabledCount(streamerAccounts) }}/{{ streamerAccounts.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加主播" title="添加主播" @click="openAccount(null, 'STREAMER')"><Plus :size="18" /></button></header><ul><li v-for="account in visibleRows(streamerAccounts, 'streamer')" :key="account.id" :class="{ inactive: !account.active, 'test-switchable': canTestSwitch(account) }" :tabindex="canTestSwitch(account) ? 0 : undefined" @click="switchTestAccount(account)" @keydown.enter="switchTestAccount(account)"><img class="mini-avatar avatar-streamer" :src="streamerAvatar" alt="" /><span><b>{{ account.nickname }}</b><small v-if="!account.active">已停用</small><small v-else-if="!account.attending">休息中···</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`管理${account.nickname}`" :title="`管理${account.nickname}`" @click.stop="openAccount(account)"><UserCog :size="17" /></button></li></ul><button v-if="streamerAccounts.length > 5" class="section-expander" @click="toggleSection('streamer')"><ChevronUp v-if="expandedSections.streamer" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.streamer ? '收起' : `展开 ${streamerAccounts.length - 5} 项` }}</button></article>
-          <article class="setting-card"><header><div class="setting-title"><h2>团播组</h2><small>启用{{ enabledCount(teams) }}/{{ teams.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加团播组" title="添加团播组" @click="openResource('team')"><Plus :size="18" /></button></header><ul><li v-for="team in visibleRows(teams, 'team')" :key="team.id" :class="{ inactive: !team.active }"><span class="mini-avatar team-avatar">{{ avatarInitial(team.name) }}</span><span><b>{{ team.name }}</b><small v-if="!team.active">已停用</small></span><button v-if="isAdmin" class="icon-action" :aria-label="`编辑${team.name}`" :title="`编辑${team.name}`" @click="openResource('team', team)"><UsersRound :size="17" /></button></li></ul><button v-if="teams.length > 5" class="section-expander" @click="toggleSection('team')"><ChevronUp v-if="expandedSections.team" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.team ? '收起' : `展开 ${teams.length - 5} 项` }}</button></article>
+          <article class="setting-card"><header><div class="setting-title"><h2>团播组</h2><small>启用{{ enabledCount(teams) }}/{{ teams.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加团播组" title="添加团播组" @click="openResource('team')"><Plus :size="18" /></button></header><ul><li v-for="team in visibleRows(teams, 'team')" :key="team.id" :class="{ inactive: !team.active }"><span class="mini-avatar team-avatar">{{ avatarInitial(team.name) }}</span><span><b>{{ team.name }}</b><small>{{ teamNumber(team) }}<template v-if="!team.active"> · 已停用</template></small></span><button v-if="isAdmin" class="icon-action" :aria-label="`编辑${team.name}`" :title="`编辑${team.name}`" @click="openResource('team', team)"><UsersRound :size="17" /></button></li></ul><button v-if="teams.length > 5" class="section-expander" @click="toggleSection('team')"><ChevronUp v-if="expandedSections.team" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.team ? '收起' : `展开 ${teams.length - 5} 项` }}</button></article>
           <article class="setting-card"><header><div class="setting-title"><h2>系统人员</h2><small>启用{{ enabledCount(administratorAccounts) }}/{{ administratorAccounts.length }}</small></div><button v-if="isAdmin" class="icon-action" aria-label="添加系统人员" title="添加系统人员" @click="openAccount(null, 'OBSERVER')"><Plus :size="18" /></button></header><ul><li v-for="account in visibleRows(administratorAccounts, 'administrator')" :key="account.id" :class="{ inactive: !account.active, 'test-switchable': canTestSwitch(account) }" :tabindex="canTestSwitch(account) ? 0 : undefined" @click="switchTestAccount(account)" @keydown.enter="switchTestAccount(account)"><img class="mini-avatar avatar-system" :src="systemAvatar" alt="" /><span><b>{{ roleLabel(account.role) }} · {{ account.nickname }}</b><small v-if="!account.active">已停用</small></span><button v-if="isAdmin && account.role !== 'SUPER_ADMIN' && (isSuperAdmin || account.role !== 'OPERATOR')" class="icon-action" :aria-label="`管理${account.nickname}`" :title="`管理${account.nickname}`" @click.stop="openAccount(account)"><UserCog :size="17" /></button></li></ul><button v-if="administratorAccounts.length > 5" class="section-expander" @click="toggleSection('administrator')"><ChevronUp v-if="expandedSections.administrator" :size="17" /><ChevronDown v-else :size="17" />{{ expandedSections.administrator ? '收起' : `展开 ${administratorAccounts.length - 5} 项` }}</button></article>
           <article v-if="setting" class="setting-card system-entry-card"><header><div><h2>系统入口</h2><p>关闭后仅对管理人员开放。</p></div><button class="switch" :class="{ on: setting.enabled }" :disabled="!isAdmin" @click="toggleSystem"><i /></button></header></article>
         </section>
       </template>
     </section>
 
-    <AppSheet :open="!!detail && !action" title="预约详情" :subtitle="detailSubtitle" @close="detail = null"><div v-if="detail" class="detail-stack detail-sections">
+    <AppSheet :open="detailOpen && !action" title="预约详情" :subtitle="detailSubtitle" @close="closeDetail"><div v-if="detailLoading" class="detail-skeleton" aria-label="预约详情加载中"><span/><span/><span/><span/></div><div v-else-if="detailError" class="detail-error"><b>详情加载失败</b><p>{{ detailError }}</p></div><div v-else-if="detail" class="detail-stack detail-sections">
       <div class="detail-hero"><TimeText :value="detail.startTime" /><div class="detail-statuses"><span class="status" :class="detail.status.toLowerCase()">{{ statusLabel(detail.status) }}</span><span class="attendance-badge" :class="detail.attendanceStatus.toLowerCase()">{{ attendanceLabel(detail.attendanceStatus) }}</span></div></div>
       <section><h3>基础信息</h3><dl><div><dt>预约时间</dt><dd>{{ detail.bookingDate.slice(5) }} {{ detail.startTime.slice(0,5) }}</dd></div><div><dt>主播</dt><dd>{{ detail.streamerName }}</dd></div><div><dt>化妆师</dt><dd>{{ detail.makeupArtistName }}</dd></div><div><dt>团播组</dt><dd>{{ detail.teamName }}</dd></div></dl></section>
-      <section><h3>操作信息</h3><dl><div><dt>创建时间</dt><dd>{{ dateTime(detail.createdAt) }}</dd></div><div v-if="detail.updatedAt&&detail.updatedAt!==detail.createdAt"><dt>修改时间</dt><dd>{{ dateTime(detail.updatedAt) }}</dd></div><div><dt>创建来源</dt><dd>{{ sourceLabel(detail.source) }}</dd></div><div v-if="detail.source && detail.source !== 'STREAMER'"><dt>代预约</dt><dd>{{ detail.createdByName || '—' }}</dd></div></dl></section>
+      <section><h3>操作信息</h3><dl><div><dt>创建时间</dt><dd>{{ dateTime(detail.createdAt) }}</dd></div><div><dt>创建来源</dt><dd>{{ sourceLabel(detail.source) }}</dd></div><div v-if="detail.source && detail.source !== 'STREAMER'"><dt>代预约</dt><dd>{{ detail.createdByName || '—' }}</dd></div></dl></section>
       <section><h3>修改记录</h3><div v-if="detail.modifications?.length" class="modification-list"><article v-for="(record,index) in detail.modifications" :key="index"><header><b>{{ record.actorName || '未知人员' }}</b><time>{{ dateTime(record.createdAt) }}</time></header><p v-if="record.reason">{{ record.reason }}</p><ul><li v-for="change in record.changes" :key="change.field"><span>{{ change.field }}</span><del>{{ change.before || '—' }}</del><i>→</i><ins>{{ change.after || '—' }}</ins></li></ul></article></div><p v-else class="empty-copy">暂无修改记录</p></section>
       <section v-if="hasOtherDetail"><h3>其他数据</h3><dl><div v-if="detail.attendanceEvidenceAt"><dt>签到时间</dt><dd>{{ dateTime(detail.attendanceEvidenceAt) }}</dd></div><div v-if="detail.cancelledAt"><dt>取消时间</dt><dd>{{ dateTime(detail.cancelledAt) }}</dd></div><div v-if="detail.cancelledByName"><dt>取消人</dt><dd>{{ detail.cancelledByName }}</dd></div><div v-if="detail.cancelReason"><dt>取消原因</dt><dd>{{ detail.cancelReason }}</dd></div><div v-if="detail.conflictOverride"><dt>时间重叠</dt><dd>是</dd></div></dl></section>
       <div v-if="detail.status === 'ACTIVE' && ((canModify && detail.resourceModificationAllowed) || canCancel)" class="action-row"><button v-if="canModify && detail.resourceModificationAllowed" class="appointment-action modify" @click="openAction('modify', detail)">修改</button><button v-if="canCancel" class="appointment-action cancel" @click="openAction('cancel', detail)"><X :size="17" />取消</button></div>
@@ -591,7 +629,7 @@ onMounted(init)
             <button v-for="employee in dingTalkEmployees" v-else :key="employee.dingTalkUserId" type="button" role="option" :aria-selected="accountForm.dingTalkUserId === employee.dingTalkUserId" :class="{ selected: accountForm.dingTalkUserId === employee.dingTalkUserId }" @click="selectDingTalk(employee)"><span>{{ employee.dingTalkUsername }}</span><small>@{{ employee.dingTalkUserId }}</small><Check v-if="accountForm.dingTalkUserId === employee.dingTalkUserId" :size="17" /></button>
             <p v-if="!dingTalkLoading && !dingTalkEmployees.length">没有可注册的同事</p>
           </div>
-          <label><span>昵称</span><input v-model="accountForm.nickname" maxlength="100" placeholder="系统内显示的昵称" /></label>
+          <label><span>昵称</span><input v-model="accountForm.nickname" maxlength="100" placeholder="系统内显示的昵称" :disabled="!accountForm.dingTalkUserId" /></label>
         </template>
         <div class="toggle-grid">
           <div><span>账号启用</span><button class="switch" :class="{ on: accountForm.active }" @click="accountForm.active = !accountForm.active"><i /></button></div>
@@ -613,7 +651,7 @@ onMounted(init)
       <template #footer><button class="button primary full" :disabled="!accountCanSave" @click="saveAccount">{{ accountSubmitLabel }}</button></template>
     </AppSheet>
     <AppSheet :open="revokePasswordOpen" title="确认回收密码" @close="revokePasswordOpen = false"><div class="confirm-copy"><div class="warning-icon">!</div><p>回收后仅钉钉登录，账号密码登录需重新分配</p></div><template #footer><div class="two-buttons"><button class="button secondary" @click="revokePasswordOpen = false">暂不回收</button><button class="button danger-solid" @click="revokePassword">确认回收</button></div></template></AppSheet>
-    <AppSheet :open="exportOpen" title="确认导出预约数据" @close="exportOpen = false"><dl class="export-summary"><div><dt>时间区间</dt><dd>{{ exportSummary.date }}</dd></div><div><dt>主播</dt><dd>{{ exportSummary.streamer }}</dd></div><div><dt>化妆师</dt><dd>{{ exportSummary.makeupArtist }}</dd></div><div><dt>签到状态</dt><dd>{{ exportSummary.attendance }}</dd></div><div><dt>预约状态</dt><dd>{{ exportSummary.status }}</dd></div></dl><template #footer><div class="two-buttons"><button class="button secondary" :disabled="exporting" @click="exportOpen = false">取消</button><button class="button primary" :disabled="exporting" @click="exportAppointments">{{ exporting ? '导出中…' : '确认导出' }}</button></div></template></AppSheet>
+    <AppSheet :open="exportOpen" title="导出数据" @close="exportOpen = false"><template #subtitle><small class="export-sheet-subtitle"><Download :size="13"/>浏览器内下载</small></template><dl class="export-summary"><div><dt>时间区间</dt><dd>{{ exportSummary.date }}</dd></div><div><dt>主播</dt><dd>{{ exportSummary.streamer }}</dd></div><div><dt>化妆师</dt><dd>{{ exportSummary.makeupArtist }}</dd></div><div><dt>签到状态</dt><dd>{{ exportSummary.attendance }}</dd></div><div><dt>预约状态</dt><dd>{{ exportSummary.status }}</dd></div></dl><template #footer><div class="two-buttons"><button class="button secondary" :disabled="exporting" @click="exportOpen = false">取消</button><button class="button primary" :disabled="exporting" @click="exportAppointments">{{ exporting ? '导出中…' : '确认导出' }}</button></div></template></AppSheet>
     <AppSheet :open="cardDateOpen" title="钉钉群卡片" @close="cardDateOpen = false"><div class="card-date-options"><button :class="{ active: cardDate === 'today' }" @click="cardDate = 'today'"><b>今天</b><br />{{ shanghaiDate() }}</button><button :class="{ active: cardDate === 'tomorrow' }" @click="cardDate = 'tomorrow'"><b>明天</b><br />{{ shanghaiDate(1) }}</button></div><template #footer><button class="button full card-submit" :class="{ resend: cardWasDelivered }" :disabled="cardSubmitDisabled" @click="sendCard"><RotateCcw v-if="cardWasDelivered" :size="17" />{{ cardWasDelivered ? '刷新卡片' : '确认发送' }}</button></template></AppSheet>
     <AppSheet :open="!!overlapConfirmAction" title="确认重叠预约" @close="overlapConfirmAction=null"><div class="confirm-copy"><div class="warning-icon">!</div><p>所选化妆师在该时段已有预约。确认现场可以协调后再继续提交。</p></div><template #footer><div class="two-buttons"><button class="button secondary" @click="overlapConfirmAction=null">返回调整</button><button class="button primary" @click="confirmOverlap">确认提交</button></div></template></AppSheet>
     <AppSheet :open="logoutOpen" title="退出登录" @close="logoutOpen = false"><p>确定要退出当前账号吗？</p><template #footer><div class="action-row"><button class="button secondary" @click="logoutOpen = false">取消</button><button class="button danger" @click="logout">退出登录</button></div></template></AppSheet>
