@@ -56,7 +56,7 @@ class ExternalPostgreSqlIT {
     service.update(admin,id,new AccountService.Patch("三三","MAKEUP",true,true,null,null,true,((Number)disabled.get("version")).intValue()),"it-enable");
     assertThat(jdbc.queryForObject("SELECT is_active FROM makeup_artist WHERE id=?",Boolean.class,makeupArtistId)).isTrue();
     assertThatThrownBy(()->jdbc.update("UPDATE app_user SET dingtalk_username='李四' WHERE id=?",id)).hasMessageContaining("DingTalk identity is immutable");
-    Map<String,String> credential=service.assignPassword(admin,id,"it-assign");assertThat(credential.get("username")).matches("HZ\\d{4}");assertThat(credential.get("password")).matches("^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])[A-Za-z0-9]{10}$").doesNotContainAnyWhitespaces();
+    Map<String,String> credential=service.assignPassword(admin,id,"it-assign");assertThat(credential.get("username")).matches("HZ\\d{4}");assertThat(credential.get("password")).isEqualTo(credential.get("username"));
     Map<String,Object> stored=jdbc.queryForMap("SELECT username,password_hash,must_change_password FROM app_user WHERE id=?",id);assertThat(stored.get("username")).isEqualTo(credential.get("username"));assertThat(passwords.matches(credential.get("password"),(String)stored.get("password_hash"))).isTrue();assertThat(stored.get("must_change_password")).isEqualTo(true);
     service.revokePassword(admin,id,"it-revoke");stored=jdbc.queryForMap("SELECT username,password_hash,must_change_password FROM app_user WHERE id=?",id);assertThat(stored.get("username")).isNull();assertThat(stored.get("password_hash")).isNull();assertThat(stored.get("must_change_password")).isEqualTo(false);
   }

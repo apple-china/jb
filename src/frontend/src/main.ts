@@ -8,6 +8,7 @@ import ForbiddenView from './views/ForbiddenView.vue'
 import CardDebugView from './views/CardDebugView.vue'
 import AuthLandingView from './views/AuthLandingView.vue'
 import { authUi, authenticateDingTalk, canAutoDingTalkLogin, clearAuthenticated, destinationFor, isSessionError, restoreSession, showAuthMessage } from './auth'
+import { ApiError } from './api'
 import './styles.css'
 import './v02.css'
 import './v03.css'
@@ -22,6 +23,15 @@ import './v11.css'
 import './v12.css'
 import './v13.css'
 import './v14.css'
+import './v15.css'
+
+function syncVisualViewportHeight(){
+  const height=window.visualViewport?.height??window.innerHeight
+  document.documentElement.style.setProperty('--app-viewport-height',`${height}px`)
+}
+syncVisualViewportHeight()
+window.visualViewport?.addEventListener('resize',syncVisualViewportHeight)
+window.addEventListener('orientationchange',syncVisualViewportHeight)
 
 const router = createRouter({
   history: createWebHistory(),
@@ -50,7 +60,7 @@ router.beforeEach(async to => {
           const user = await authenticateDingTalk()
           showAuthMessage(requested ? '已登录' : `已登录，${user.nickname}`, 'success')
           return destinationFor(user, requested)
-        } catch { showAuthMessage('免登异常，请联系管理员', 'error', 5000) }
+        } catch (error) { if(error instanceof ApiError&&['ACCOUNT_DISABLED','ACCOUNT_UNREGISTERED','FORBIDDEN'].includes(error.code))return {path:'/forbidden',query:{reason:error.code}};showAuthMessage('免登异常，请联系管理员', 'error', 5000) }
       }
       return true
     } finally { authUi.checking = false }
@@ -66,7 +76,8 @@ router.beforeEach(async to => {
         try {
           user = await authenticateDingTalk()
           showAuthMessage(to.path === '/' ? `已登录，${user.nickname}` : '已登录', 'success')
-        } catch {
+        } catch (error) {
+          if(error instanceof ApiError&&['ACCOUNT_DISABLED','ACCOUNT_UNREGISTERED','FORBIDDEN'].includes(error.code))return {path:'/forbidden',query:{reason:error.code}}
           showAuthMessage('免登异常，请联系管理员', 'error', 5000)
           return { path: '/login', query: { redirect: to.fullPath } }
         }
@@ -97,6 +108,11 @@ window.addEventListener('jiabei:session-expired', async () => {
   } catch {
     showAuthMessage('免登异常，请联系管理员', 'error', 5000); await router.replace({ path: '/login', query: { redirect } })
   } finally { authUi.checking = false; recoveringExpiredSession = false }
+})
+
+window.addEventListener('jiabei:access-restricted',(event)=>{
+  const reason=(event as CustomEvent<{reason?:string}>).detail?.reason??'FORBIDDEN'
+  void router.replace({path:'/forbidden',query:{reason}})
 })
 
 createApp(App).use(router).mount('#app')

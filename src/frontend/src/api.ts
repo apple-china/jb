@@ -17,6 +17,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
     if ((response.status === 401 || payload?.error?.code === 'SESSION_INVALIDATED') && path !== '/me' && path !== '/logout' && !path.startsWith('/auth/')) window.dispatchEvent(new CustomEvent('jiabei:session-expired'))
+    if (['SYSTEM_DISABLED','ACCOUNT_DISABLED','ACCOUNT_UNREGISTERED','FORBIDDEN'].includes(payload?.error?.code) && !path.startsWith('/auth/')) window.dispatchEvent(new CustomEvent('jiabei:access-restricted',{detail:{reason:payload.error.code}}))
     throw new ApiError(payload?.error?.code ?? 'NETWORK_ERROR', payload?.error?.message ?? '请求失败，请稍后重试。', response.status, payload?.data)
   }
   return payload.data as T

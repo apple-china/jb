@@ -26,12 +26,12 @@ public class AppointmentAnalyticsService {
         count(*) FILTER (WHERE status='ACTIVE') active,
         count(*) FILTER (WHERE status='CANCELLED') cancelled,
         count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='ARRIVED') arrived,
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='LATE') late,
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='NOT_ARRIVED') not_arrived,
+        count(*) FILTER (WHERE attendance_status='LATE') late,
+        count(*) FILTER (WHERE attendance_status='NOT_ARRIVED') not_arrived,
         coalesce(round(avg(greatest(extract(epoch FROM (start_at-attendance_evidence_at))/60.0,0))
           FILTER (WHERE status='ACTIVE' AND attendance_status='ARRIVED' AND attendance_evidence_at IS NOT NULL)),0)::bigint average_early_minutes,
         coalesce(round(avg(greatest(extract(epoch FROM (attendance_evidence_at-start_at))/60.0,0))
-          FILTER (WHERE status='ACTIVE' AND attendance_status='LATE' AND attendance_evidence_at IS NOT NULL)),0)::bigint average_late_minutes
+          FILTER (WHERE attendance_status='LATE' AND attendance_evidence_at IS NOT NULL)),0)::bigint average_late_minutes
       FROM appointment WHERE booking_date BETWEEN ? AND ?
       """,start,end);
     Map<String,Object> summary=new LinkedHashMap<>();
@@ -53,8 +53,8 @@ public class AppointmentAnalyticsService {
         count(*) FILTER (WHERE status='ACTIVE') active,
         count(*) FILTER (WHERE status='CANCELLED') cancelled,
         count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='ARRIVED') arrived,
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='LATE') late,
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='NOT_ARRIVED') not_arrived
+        count(*) FILTER (WHERE attendance_status='LATE') late,
+        count(*) FILTER (WHERE attendance_status='NOT_ARRIVED') not_arrived
       FROM appointment WHERE booking_date BETWEEN ? AND ? GROUP BY booking_date ORDER BY booking_date
       """,rs->{Map<String,Object> row=daily.get(rs.getObject(1,LocalDate.class));row.put("total",rs.getLong(2));row.put("active",rs.getLong(3));row.put("cancelled",rs.getLong(4));row.put("arrived",rs.getLong(5));row.put("late",rs.getLong(6));row.put("notArrived",rs.getLong(7));},start,end);
 
@@ -62,8 +62,8 @@ public class AppointmentAnalyticsService {
     jdbc.query("""
       SELECT streamer_user_id,max(streamer_name_snapshot),count(*),
         count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='ARRIVED'),
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='LATE'),
-        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='NOT_ARRIVED')
+        count(*) FILTER (WHERE attendance_status='LATE'),
+        count(*) FILTER (WHERE attendance_status='NOT_ARRIVED')
       FROM appointment WHERE booking_date BETWEEN ? AND ? GROUP BY streamer_user_id
       """,rs->{Map<String,Object> row=new LinkedHashMap<>();UUID id=rs.getObject(1,UUID.class);row.put("streamerId",id);row.put("streamerName",rs.getString(2));row.put("appointments",rs.getLong(3));row.put("arrived",rs.getLong(4));row.put("late",rs.getLong(5));row.put("notArrived",rs.getLong(6));row.put("modifications",0L);row.put("cancellations",0L);streamerRows.put(id,row);},start,end);
     jdbc.query("""

@@ -39,7 +39,9 @@ public class SessionService {
   }
 
   public CurrentUser loginByDingTalk(String dingTalkUserId,HttpServletResponse response,String trace){
-    return finishLogin(find("dingtalk_user_id",dingTalkUserId),dingTalkUserId,"DINGTALK",response,trace);
+    List<UserRow> rows=find("dingtalk_user_id",dingTalkUserId);
+    if(rows.isEmpty()){auditLogin(null,dingTalkUserId,"LOGIN_DENIED","DINGTALK",trace);throw new BusinessException(HttpStatus.FORBIDDEN,"ACCOUNT_UNREGISTERED","当前钉钉账号暂未注册。");}
+    return finishLogin(rows,dingTalkUserId,"DINGTALK",response,trace);
   }
 
   public CurrentUser loginMock(String identity,HttpServletResponse response,String trace){
@@ -67,7 +69,7 @@ public class SessionService {
   private CurrentUser finishLogin(List<UserRow> rows,String identity,String method,HttpServletResponse response,String trace){
     if(rows.isEmpty()){auditLogin(null,identity,"LOGIN_FAILED",method,trace);throw invalidCredentials();}
     UserRow row=rows.getFirst();
-    if(!row.active()){auditLogin(row,identity,"LOGIN_DENIED",method,trace);throw new BusinessException(HttpStatus.FORBIDDEN,"USER_NOT_AUTHORIZED","当前账号暂无权限。");}
+    if(!row.active()){auditLogin(row,identity,"LOGIN_DENIED",method,trace);throw new BusinessException(HttpStatus.FORBIDDEN,"ACCOUNT_DISABLED","当前账号暂无权限。");}
     String token=randomToken(),csrf=randomToken();
     Instant expiresAt=Instant.now().plus(ttl);
     jdbc.update("DELETE FROM auth_session WHERE expires_at < now()");

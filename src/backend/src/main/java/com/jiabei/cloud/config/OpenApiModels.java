@@ -48,7 +48,10 @@ public final class OpenApiModels {
     @Schema(title="允许时间重叠",description="创建或修改时是否由有权角色覆盖了时段冲突。",example="false") boolean conflictOverride,
     @Schema(title="版本号",description="乐观锁版本，修改或取消时必须回传最新值。",example="0") int version,
     @Schema(title="是否修改过",description="版本号大于零时为 true。",example="false") boolean changed,
-    @Schema(title="创建时间",description="预约创建时间。",format="date-time") OffsetDateTime createdAt){}
+    @Schema(title="创建时间",description="预约创建时间。",format="date-time") OffsetDateTime createdAt,
+    @Schema(title="取消时间",description="未取消时为空。",format="date-time",nullable=true) OffsetDateTime cancelledAt,
+    @Schema(title="最近修改时间",description="从未修改时为空。",format="date-time",nullable=true) OffsetDateTime modifiedAt,
+    @Schema(title="存在修改记录",description="是否存在至少一条修改审计。") boolean hasModification){}
 
   public record ScheduleEntry(
     @Schema(title="开始时间",description="日程开始时间。",type="string",format="time",example="19:00") LocalTime startTime,
@@ -128,12 +131,20 @@ public final class OpenApiModels {
     @Schema(title="修改前数据",description="JSON 格式的修改前快照。",nullable=true) String before,
     @Schema(title="修改后数据",description="JSON 格式的修改后快照。",nullable=true) String after,
     @Schema(title="操作时间",description="审计记录创建时间。",format="date-time") OffsetDateTime createdAt){}
+  public record Operation(
+    @Schema(title="操作类型",allowableValues={"CREATE","MODIFY","CANCEL"}) String type,
+    @Schema(title="操作人",description="操作发生时的姓名快照。") String actorName,
+    @Schema(title="操作时间",format="date-time") OffsetDateTime createdAt,
+    @Schema(title="操作原因",nullable=true) String reason,
+    @Schema(title="取消时签到状态",allowableValues={"PENDING","ARRIVED","NOT_ARRIVED","LATE"},nullable=true) String attendanceSnapshot,
+    @ArraySchema(arraySchema=@Schema(title="变更内容"),schema=@Schema(implementation=Change.class)) List<Change> changes){}
   public record AppointmentDetail(
     @Schema(title="创建来源",description="创建预约的角色。",allowableValues={"STREAMER","SUPER_ADMIN","OPERATOR","MAKEUP"}) String source,
     @Schema(title="创建人",description="优先使用创建审计中的员工姓名快照。") String createdByName,
     @Schema(title="取消时间",description="未取消时为空。",format="date-time",nullable=true) OffsetDateTime cancelledAt,
     @Schema(title="取消原因",description="未填写或未取消时为空。",nullable=true) String cancelReason,
     @Schema(title="取消人",description="未取消时为空。",nullable=true) String cancelledByName,
+    @ArraySchema(arraySchema=@Schema(title="统一操作记录",description="创建、修改和取消按时间倒序排列。"),schema=@Schema(implementation=Operation.class)) List<Operation> operations,
     @ArraySchema(arraySchema=@Schema(title="结构化修改记录",description="按时间倒序排列。"),schema=@Schema(implementation=Modification.class)) List<Modification> modifications,
     @ArraySchema(arraySchema=@Schema(title="原始审计记录",description="为兼容旧客户端保留。"),schema=@Schema(implementation=Audit.class)) List<Audit> audits){}
 

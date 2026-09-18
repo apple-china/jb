@@ -25,9 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccountService {
   private static final SecureRandom RANDOM=new SecureRandom();
-  private static final String PASSWORD_UPPER="ABCDEFGHJKLMNPQRSTUVWXYZ";
-  private static final String PASSWORD_LOWER="abcdefghijkmnopqrstuvwxyz";
-  private static final String PASSWORD_DIGITS="23456789";
   private final JdbcTemplate jdbc;
   private final PasswordService passwords;
   private final ObjectMapper json;
@@ -137,7 +134,7 @@ public class AccountService {
     if(role==CurrentUser.Role.SUPER_ADMIN||actor.id().equals(id))throw BusinessException.forbidden();requireMayManage(actor,role);
     String username=nextUsername(role);
     if(username==null)throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_NAME_GENERATION_FAILED","账号生成冲突，请重试。");
-    String password=temporaryPassword();
+    String password=username;
     jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=true,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode(password),id);
     audit(id,"PASSWORD_ASSIGNED",actor,Map.of("username",username),trace);
     return Map.of("username",username,"password",password);
@@ -180,12 +177,6 @@ public class AccountService {
     if(b==d&&a!=b&&c!=b)return 4;
     int x=a-'0',y=b-'0',z=c-'0',w=d-'0';if((y==x+1&&z==y+1&&w==z+1)||(y==x-1&&z==y-1&&w==z-1))return 5;
     return 6;
-  }
-  private String temporaryPassword(){
-    String all=PASSWORD_UPPER+PASSWORD_LOWER+PASSWORD_DIGITS;List<Character> chars=new ArrayList<>();
-    chars.add(PASSWORD_UPPER.charAt(RANDOM.nextInt(PASSWORD_UPPER.length())));chars.add(PASSWORD_LOWER.charAt(RANDOM.nextInt(PASSWORD_LOWER.length())));chars.add(PASSWORD_DIGITS.charAt(RANDOM.nextInt(PASSWORD_DIGITS.length())));
-    while(chars.size()<10)chars.add(all.charAt(RANDOM.nextInt(all.length())));
-    java.util.Collections.shuffle(chars,RANDOM);StringBuilder result=new StringBuilder(10);chars.forEach(result::append);return result.toString();
   }
   private Map<String,Object> lock(UUID id){
     List<Map<String,Object>> rows=jdbc.query("""

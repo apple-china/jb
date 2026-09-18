@@ -103,8 +103,9 @@ test('administrator range filtering, total, pagination, export and send-card pic
   await expect(page.getByLabel('开始日期')).toHaveCount(0)
   await page.getByRole('button',{name:'筛选预约记录'}).click()
   const currentDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date())
-  await expect(page.getByLabel('开始日期')).toContainText(currentDate)
-  await expect(page.getByLabel('截止日期')).toContainText(currentDate)
+  const currentMonthDay=`${currentDate.slice(5,7)}月${currentDate.slice(8,10)}日`
+  await expect(page.getByLabel('开始日期')).toContainText(currentMonthDay)
+  await expect(page.getByLabel('截止日期')).toContainText(currentMonthDay)
   await expect(page.getByText('共 31 条记录')).toBeVisible()
   await expect(page.getByText('全部签到状态')).toBeVisible()
   await page.getByRole('button',{name:'近7天'}).click()
@@ -173,7 +174,7 @@ test('analytics exposes the expanded summary, trends and three BI rankings',asyn
   await page.locator('button:visible').filter({hasText:/^统计$/}).click()
   await expect(page.getByRole('heading',{name:'数据面板'})).toBeVisible()
   const panel=page.locator('.analytics-panel')
-  for(const label of ['预约','有效','签到','取消','迟到','未到','修改次数','取消次数','平均提前','平均迟到'])await expect(panel.getByText(label,{exact:true})).toBeVisible()
+  for(const label of ['预约','有效率','签到率','取消','迟到','未到','修改次数','取消次数','平均提前','平均迟到'])await expect(panel.getByText(label,{exact:true})).toBeVisible()
   await expect(page.getByRole('heading',{name:'有效率'})).toBeVisible()
   await expect(page.getByRole('heading',{name:'签到率'})).toBeVisible()
   await expect(page.getByRole('heading',{name:'每日趋势'})).toBeVisible()
@@ -190,7 +191,7 @@ test('settings use first character avatars, counts and icon expanders',async({pa
   await page.goto('/admin')
   await page.locator('button:visible').filter({hasText:/^设置$/}).click()
   const makeupCard=page.locator('.setting-card').filter({has:page.getByRole('heading',{name:'化妆师',exact:true})})
-  await expect(makeupCard.locator('img.mini-avatar').first()).toHaveAttribute('src',/\.webp(?:\?|$)/)
+  await expect(makeupCard.locator('.mini-avatar img').first()).toHaveAttribute('src',/\.webp(?:\?|$)/)
   await expect(makeupCard).toContainText('启用2/2')
   await expect(page.getByText('休息中···',{exact:true})).toBeVisible()
   await expect(page.getByText('已启用',{exact:true})).toHaveCount(0)
@@ -238,7 +239,7 @@ test('account creation uses on-demand DingTalk options and password actions are 
   const created:any[]=[],updated:any[]=[]
   page.on('request',request=>{if(request.url().endsWith('/api/v1/admin/accounts')&&request.method()==='POST')created.push(request.postDataJSON());if(request.url().endsWith('/api/v1/admin/accounts/s2')&&request.method()==='PATCH')updated.push(request.postDataJSON())})
   const {accountRows}=await mockAdmin(page)
-  await page.route('**/api/v1/admin/accounts/s2/assign-password',r=>{const account=accountRows.find(item=>item.id==='s2');account.username='JB2609074543';return r.fulfill({json:{success:true,data:{username:'JB2609074543',password:'123456'}}})})
+  await page.route('**/api/v1/admin/accounts/s2/assign-password',r=>{const account=accountRows.find(item=>item.id==='s2');account.username='ZB4543';return r.fulfill({json:{success:true,data:{username:'ZB4543',password:'ZB4543'}}})})
   await page.route('**/api/v1/admin/accounts/s2/revoke-password',r=>{const account=accountRows.find(item=>item.id==='s2');delete account.username;return r.fulfill({json:{success:true,data:null}})})
   await page.route('**/api/v1/admin/accounts/s2',r=>r.fulfill({json:{success:true,data:{}}}))
   await page.goto('/admin')
@@ -254,7 +255,7 @@ test('account creation uses on-demand DingTalk options and password actions are 
   await expect(createSheet.getByRole('listbox',{name:'钉钉员工选项'})).toBeVisible()
   await createSheet.getByRole('button',{name:'搜索人员'}).click()
   await createSheet.getByLabel('搜索钉钉员工').fill('张三')
-  await createSheet.getByRole('option',{name:/张三.*user123456/}).click()
+  await createSheet.getByRole('option',{name:/张三.*@user12\*\*/}).click()
   await expect(createSheet.getByPlaceholder('系统内显示的昵称')).toHaveValue('张三')
   await createSheet.getByRole('button',{name:'添加'}).click()
   await expect.poll(()=>created.length).toBe(1)
@@ -292,8 +293,7 @@ test('account creation uses on-demand DingTalk options and password actions are 
   await page.getByRole('option',{name:'主播'}).click()
   await expect(editSheet.getByRole('button',{name:'回收密码'})).toHaveCount(0)
   await editSheet.getByRole('button',{name:'分配密码'}).click()
-  await expect(editSheet.getByText('JB2609074543')).toBeVisible()
-  await expect(editSheet.getByText('123456',{exact:true})).toBeVisible()
+  await expect(editSheet.getByText('ZB4543')).toHaveCount(2)
   await expect(editSheet.getByRole('button',{name:'分配密码'})).toHaveCount(0)
   await editSheet.getByRole('button',{name:'回收密码'}).click()
   const revokeSheet=page.getByRole('dialog',{name:'确认回收密码'})
@@ -353,7 +353,7 @@ test('duplicate nickname and team name show specific prompts',async({page})=>{
   await page.getByRole('button',{name:'添加主播'}).click()
   let sheet=page.getByRole('dialog',{name:'添加 主播'})
   await sheet.getByRole('button',{name:'选择钉钉人员'}).click()
-  await sheet.getByRole('option',{name:/张三.*user123456/}).click()
+  await sheet.getByRole('option',{name:/张三.*@user12\*\*/}).click()
   await sheet.getByPlaceholder('系统内显示的昵称').fill(' Admin ')
   await sheet.getByRole('button',{name:'添加'}).click()
   await expect(page.locator('.app-toast-warning')).toContainText('昵称已存在，请使用其他昵称')
@@ -366,14 +366,12 @@ test('duplicate nickname and team name show specific prompts',async({page})=>{
   await expect(page.locator('.app-toast-warning')).toContainText('团队名称已存在，请使用其他名称')
 })
 
-test('appointment detail hides false overlap and shows true overlap',async({page})=>{
+test('appointment detail never exposes the overlap implementation flag',async({page})=>{
   let conflict=false
   await mockAdmin(page)
   await page.route('**/api/v1/admin/appointments/a1',r=>r.fulfill({json:{success:true,data:{...appointment,bookingNumber:'090810001-streamer01',conflictOverride:conflict}}}))
   await page.goto('/admin')
-  const openDetail=(page.viewportSize()?.width??0)<=720
-    ? page.locator('.mobile-admin-list > button:visible').first()
-    : page.getByRole('button',{name:'查看预约详情'}).first()
+  const openDetail=page.locator('.mobile-admin-list > button:visible').first()
   await openDetail.click()
   let sheet=page.getByRole('dialog',{name:'预约详情'})
   await expect(sheet.getByText('时间重叠',{exact:true})).toHaveCount(0)
@@ -381,7 +379,7 @@ test('appointment detail hides false overlap and shows true overlap',async({page
   conflict=true
   await openDetail.click()
   sheet=page.getByRole('dialog',{name:'预约详情'})
-  await expect(sheet.getByText('时间重叠',{exact:true})).toBeVisible()
+  await expect(sheet.getByText('时间重叠',{exact:true})).toHaveCount(0)
 })
 
 test('makeup permission hides create entry and the whole mobile navigation',async({page})=>{
@@ -409,6 +407,7 @@ test('disabled schedule locks controls and requires weekdays when re-enabled',as
 
 test('forbidden employee is isolated',async({page})=>{
   await page.goto('/forbidden')
-  await expect(page.getByRole('heading',{name:'暂时没有使用权限'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'访问受限'})).toBeVisible()
+  await expect(page.getByText('当前账号无法访问此页面')).toBeVisible()
 })
 
