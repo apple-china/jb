@@ -13,7 +13,7 @@ describe('DingTalk test login',()=>{
     await router.push('/login');await router.isReady()
     const wrapper=mount(LoginView,{global:{plugins:[router]}})
     expect(wrapper.text()).toContain('加贝互娱')
-    expect(wrapper.text()).toContain('账号登录')
+    expect(wrapper.text()).not.toContain('账号登录')
     expect(wrapper.text()).not.toContain('可使用钉钉免登')
     expect(wrapper.text()).toContain('钉钉免登')
     expect(wrapper.findAll('.password-login input')).toHaveLength(2)

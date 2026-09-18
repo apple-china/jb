@@ -25,7 +25,7 @@ class PostgreSqlConstraintIT {
   void newBaselineMigratesFromEmptyDatabase() {
     Flyway flyway = Flyway.configure().locations("classpath:db/migration", "classpath:db/local")
         .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()).load();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(18);
+    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(20);
 
     JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(
         postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()));

@@ -1,0 +1,53 @@
+/* Round-two mobile, loading and analytics refinements. */
+html,body,#app{max-width:100%;overflow-x:hidden}
+.admin-app,.admin-main,.record-shell,.analytics-page,.analytics-grid,.analytics-panel,.metric-grid,.record-filter-grid,.form-grid,.settings-grid{min-width:0;max-width:100%}
+.admin-main>*{min-width:0}
+.record-filter-grid>*,.form-grid>*{min-width:0}
+.date-picker,.date-picker-trigger,.smart-select,.smart-select-trigger,.admin-date-choice{min-width:0;max-width:100%}
+.sheet-backdrop{padding:max(18px,env(safe-area-inset-top)) 12px max(8px,env(safe-area-inset-bottom));align-items:flex-end}
+.sheet{display:grid;grid-template-rows:auto minmax(0,1fr) auto;max-height:78dvh;overflow:hidden}
+.sheet>header{position:relative;z-index:2;background:inherit}
+.sheet-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.sheet>footer{position:relative;z-index:2;background:inherit;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.mini-avatar,.admin-avatar,.avatar{border-radius:50%;overflow:hidden}
+.mini-avatar img,.admin-avatar img,.avatar img,.mini-avatar.avatar-system,.mini-avatar.avatar-streamer,.mini-avatar.avatar-makeup{object-fit:cover}
+.inline-skeleton{display:grid;gap:10px;padding:8px 0}
+.inline-skeleton span{display:block;height:44px;border-radius:12px;background:linear-gradient(90deg,#edf1f6 25%,#f8fafc 50%,#edf1f6 75%);background-size:200% 100%;animation:skeleton 1.2s infinite}
+.mobile-admin-list .appointment-row{position:relative}
+.mobile-admin-list .appointment-row.new:before,.mobile-admin-list .appointment-row.modified:before,.mobile-admin-list .appointment-row.cancelled:before{content:"";position:absolute;left:7px;top:7px;width:7px;height:7px;border-radius:50%;background:#22a06b;box-shadow:0 0 0 3px #dcfce7}
+.mobile-admin-list .appointment-row.modified:before,.mobile-admin-list .appointment-row.cancelled:before{background:#e6a700;box-shadow:0 0 0 3px #fff4cc}
+.mobile-admin-list>button>span:first-child{align-items:center;text-align:center;line-height:1.25}
+.mobile-admin-list .mobile-record-date{margin-top:5px}
+.analytics-presets{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;width:100%}
+.analytics-presets button{min-width:0;width:100%}
+.analytics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.analytics-card,.analytics-card>*{min-width:0}
+.analytics-trend{grid-column:1/-1;overflow:hidden}
+.trend-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.analytics-ranking header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.analytics-ranking header>small{color:#718096}
+.schedule-list>div{padding-block:14px;min-height:66px}
+.plain-empty{border:0!important;background:transparent!important;box-shadow:none!important;padding:28px 0!important;text-align:center}
+.dingtalk-options{max-height:min(52dvh,430px);overflow-y:auto;overscroll-behavior:contain}
+.dingtalk-close{position:sticky;top:0;z-index:2;display:flex!important;justify-content:center;gap:6px;background:#fff!important}
+.credential-card{scroll-margin-bottom:20px}
+.login-card>.brand{justify-content:center;text-align:center;margin-inline:auto}
+.login-card>.brand img{width:54px;height:54px;object-fit:contain}
+.password-login{margin-top:18px}
+.operation-list article{border:1px solid #edf0f5;border-radius:14px;padding:12px}
+
+@media(max-width:700px){
+  .admin-main{width:100%;overflow-x:hidden;padding-inline:12px}
+  .record-shell,.analytics-page,.settings-grid,.admin-form-card{width:100%;max-width:100%;overflow-x:hidden}
+  .record-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .analytics-custom{display:grid;grid-template-columns:minmax(0,1fr);width:100%}
+  .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .analytics-grid{grid-template-columns:minmax(0,1fr)}
+  .analytics-trend{grid-column:auto}
+  .analytics-card{max-width:100%;overflow:hidden}
+  .admin-date-choice{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .record-actions .record-action[title="规则"]{margin-right:auto}
+  .sheet{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}
+  .calendar-popover{max-width:calc(100vw - 24px)}
+  .login-card{overflow:hidden}
+}

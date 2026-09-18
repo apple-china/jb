@@ -13,7 +13,7 @@ const root=ref<HTMLElement|null>(null),menu=ref<HTMLElement|null>(null),open=ref
 const menuStyle=ref<Record<string,string>>({})
 const selected=computed(()=>props.options.find(item=>item.value===props.modelValue))
 function close(){open.value=false;if(closeActiveSelect===close)closeActiveSelect=null}
-async function toggle(){if(props.disabled)return;if(open.value){close();return}closeActiveSelect?.();open.value=true;closeActiveSelect=close;await nextTick();positionMenu()}
+async function toggle(){if(props.disabled)return;if(open.value){close();return}closeActiveSelect?.();open.value=true;closeActiveSelect=close;await nextTick();positionMenu();await nextTick();menu.value?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({block:'center'})}
 function choose(value:string){emit('update:modelValue',value);emit('change',value);close()}
 function positionMenu(){
   if(!open.value||!root.value||!menu.value)return

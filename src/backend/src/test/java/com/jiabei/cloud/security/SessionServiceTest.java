@@ -21,7 +21,7 @@ class SessionServiceTest {
   }
 
   @Test void loginAcceptsTrimmedAlphanumericUsernameFromSixToTwelveCharacters(){
-    assertThatCode(()->SessionService.normalizeLoginUsername(" Abc123 ","123456")).doesNotThrowAnyException();
+    assertThat(SessionService.normalizeLoginUsername(" Abc123 ","123456")).isEqualTo("ABC123");
     assertThatThrownBy(()->SessionService.normalizeLoginUsername(" 12345 ","123456")).isInstanceOf(BusinessException.class);
     assertThatThrownBy(()->SessionService.normalizeLoginUsername("abc_123","123456")).isInstanceOf(BusinessException.class);
     assertThatThrownBy(()->SessionService.normalizeLoginUsername("abcdefghijklm","123456")).isInstanceOf(BusinessException.class);

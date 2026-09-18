@@ -3,6 +3,7 @@ package com.jiabei.cloud.service;
 import com.jiabei.cloud.config.BookingProperties;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -60,6 +61,12 @@ public class CardRefreshService {
 
   public void refreshExistingWindow() {
     refreshExistingWindowExcept(null);
+  }
+
+  /** Refresh every already-created group card affected by a historical rename. */
+  public void refreshExistingDates(Collection<LocalDate> dates) {
+    if (dates == null) return;
+    dates.stream().filter(Objects::nonNull).distinct().forEach(this::refreshExisting);
   }
 
   @Scheduled(cron="${jiabei.booking.card-relative-date-cron:0 0 0 * * *}", zone="Asia/Shanghai")

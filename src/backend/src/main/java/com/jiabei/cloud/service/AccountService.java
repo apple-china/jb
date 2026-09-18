@@ -7,11 +7,13 @@ import com.jiabei.cloud.security.PasswordService;
 import com.jiabei.cloud.web.BusinessException;
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccountService {
   private static final SecureRandom RANDOM=new SecureRandom();
-  private static final DateTimeFormatter ACCOUNT_DATE=DateTimeFormatter.ofPattern("yyMMdd");
+  private static final String PASSWORD_UPPER="ABCDEFGHJKLMNPQRSTUVWXYZ";
+  private static final String PASSWORD_LOWER="abcdefghijkmnopqrstuvwxyz";
+  private static final String PASSWORD_DIGITS="23456789";
   private final JdbcTemplate jdbc;
   private final PasswordService passwords;
   private final ObjectMapper json;
@@ -123,7 +127,7 @@ public class AccountService {
             version=version+1,updated_at=now() WHERE id=?
           """,nickname,role.name(),makeupArtistId,active,attending,modify,cancel,create,active,role.name(),id);
     }catch(DataIntegrityViolationException e){throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_CONFLICT","角色、昵称或化妆师关联冲突。");}
-    if(!nickname.equals(before.get("nickname"))){int changed=jdbc.update("UPDATE appointment SET streamer_name_snapshot=?,updated_at=now() WHERE streamer_user_id=? AND streamer_name_snapshot<>?",nickname,id,nickname);if(makeupArtistId!=null)changed+=jdbc.update("UPDATE appointment SET makeup_artist_name_snapshot=?,updated_at=now() WHERE makeup_artist_id=? AND makeup_artist_name_snapshot<>?",nickname,makeupArtistId,nickname);if(changed>0&&cards!=null)cards.refreshExistingWindow();}
+    if(!nickname.equals(before.get("nickname"))){List<LocalDate> dates=affectedDates(id,makeupArtistId);int changed=jdbc.update("UPDATE appointment SET streamer_name_snapshot=?,updated_at=now() WHERE streamer_user_id=? AND streamer_name_snapshot<>?",nickname,id,nickname);if(makeupArtistId!=null)changed+=jdbc.update("UPDATE appointment SET makeup_artist_name_snapshot=?,updated_at=now() WHERE makeup_artist_id=? AND makeup_artist_name_snapshot<>?",nickname,makeupArtistId,nickname);if(changed>0&&cards!=null)cards.refreshExistingDates(dates);}
     audit(id,"UPDATE",actor,Map.of("nickname",nickname,"role",role.name(),"active",active,"attending",attending,"canCreateAppointments",create),trace);
     return byId(actor,id);
   }
@@ -131,16 +135,12 @@ public class AccountService {
   @Transactional public Map<String,String> assignPassword(CurrentUser actor,UUID id,String trace){
     Map<String,Object> target=lock(id);CurrentUser.Role role=parseRole((String)target.get("role"));
     if(role==CurrentUser.Role.SUPER_ADMIN||actor.id().equals(id))throw BusinessException.forbidden();requireMayManage(actor,role);
-    String username=null;
-    for(int attempt=0;attempt<20;attempt++){
-      String candidate="JB"+LocalDate.now(ZoneId.of("Asia/Shanghai")).format(ACCOUNT_DATE)+String.format("%04d",RANDOM.nextInt(10000));
-      Integer count=jdbc.queryForObject("SELECT count(*) FROM app_user WHERE username=?",Integer.class,candidate);
-      if(count!=null&&count==0){username=candidate;break;}
-    }
+    String username=nextUsername(role);
     if(username==null)throw new BusinessException(HttpStatus.CONFLICT,"ACCOUNT_NAME_GENERATION_FAILED","账号生成冲突，请重试。");
-    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=true,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode("123456"),id);
+    String password=temporaryPassword();
+    jdbc.update("UPDATE app_user SET username=?,password_hash=?,must_change_password=true,credential_version=credential_version+1,version=version+1,updated_at=now() WHERE id=?",username,passwords.encode(password),id);
     audit(id,"PASSWORD_ASSIGNED",actor,Map.of("username",username),trace);
-    return Map.of("username",username,"password","123456");
+    return Map.of("username",username,"password",password);
   }
 
   @Transactional public void revokePassword(CurrentUser actor,UUID id,String trace){
@@ -151,6 +151,42 @@ public class AccountService {
   }
 
   private Map<String,Object> byId(CurrentUser actor,UUID id){return list(actor).stream().filter(item->id.equals(item.get("id"))).findFirst().orElseThrow();}
+  private List<LocalDate> affectedDates(UUID userId,UUID makeupArtistId){
+    if(makeupArtistId==null)return jdbc.query("SELECT DISTINCT booking_date FROM appointment WHERE streamer_user_id=?",(rs,n)->rs.getObject(1,LocalDate.class),userId);
+    return jdbc.query("SELECT DISTINCT booking_date FROM appointment WHERE streamer_user_id=? OR makeup_artist_id=?",(rs,n)->rs.getObject(1,LocalDate.class),userId,makeupArtistId);
+  }
+  private String nextUsername(CurrentUser.Role role){
+    String prefix=Map.of(CurrentUser.Role.STREAMER,"ZB",CurrentUser.Role.MAKEUP,"HZ",CurrentUser.Role.OPERATOR,"YY",CurrentUser.Role.OBSERVER,"GC").get(role);
+    if(prefix==null)throw invalid("该角色不可分配密码账号。");
+    jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",rs->{},"assigned-account|"+prefix);
+    Set<String> used=new HashSet<>(jdbc.query("SELECT upper(username) FROM app_user WHERE username IS NOT NULL AND upper(username) LIKE ?",(rs,n)->rs.getString(1),prefix+"____"));
+    for(String suffix:memorableSuffixes()){String candidate=prefix+suffix;if(!used.contains(candidate))return candidate;}
+    List<String> remaining=new ArrayList<>();
+    for(int value=0;value<10000;value++){String candidate=prefix+String.format("%04d",value);if(!used.contains(candidate))remaining.add(candidate);}
+    if(!remaining.isEmpty())return remaining.get(RANDOM.nextInt(remaining.size()));
+    return null;
+  }
+  static List<String> memorableSuffixes(){
+    List<String> values=new ArrayList<>();
+    for(int value=0;value<10000;value++){String suffix=String.format("%04d",value);if(memoryRank(suffix)<6)values.add(suffix);}
+    values.sort(Comparator.comparingInt(AccountService::memoryRank).thenComparing(x->x));return values;
+  }
+  static int memoryRank(String value){
+    char a=value.charAt(0),b=value.charAt(1),c=value.charAt(2),d=value.charAt(3);
+    if(a==b&&b==c&&c==d)return 0;
+    if(a==b&&c==d&&a!=c)return 1;
+    if((a==b&&b==c&&c!=d)||(a!=b&&b==c&&c==d))return 2;
+    if((a==c&&b==d&&a!=b)||(a==d&&b==c&&a!=b))return 3;
+    if(b==d&&a!=b&&c!=b)return 4;
+    int x=a-'0',y=b-'0',z=c-'0',w=d-'0';if((y==x+1&&z==y+1&&w==z+1)||(y==x-1&&z==y-1&&w==z-1))return 5;
+    return 6;
+  }
+  private String temporaryPassword(){
+    String all=PASSWORD_UPPER+PASSWORD_LOWER+PASSWORD_DIGITS;List<Character> chars=new ArrayList<>();
+    chars.add(PASSWORD_UPPER.charAt(RANDOM.nextInt(PASSWORD_UPPER.length())));chars.add(PASSWORD_LOWER.charAt(RANDOM.nextInt(PASSWORD_LOWER.length())));chars.add(PASSWORD_DIGITS.charAt(RANDOM.nextInt(PASSWORD_DIGITS.length())));
+    while(chars.size()<10)chars.add(all.charAt(RANDOM.nextInt(all.length())));
+    java.util.Collections.shuffle(chars,RANDOM);StringBuilder result=new StringBuilder(10);chars.forEach(result::append);return result.toString();
+  }
   private Map<String,Object> lock(UUID id){
     List<Map<String,Object>> rows=jdbc.query("""
         SELECT id,username,dingtalk_user_id,dingtalk_username,nickname,role,makeup_artist_id,

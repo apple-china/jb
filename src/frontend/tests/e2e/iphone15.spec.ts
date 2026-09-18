@@ -55,7 +55,7 @@ test.describe('iPhone 15 Safari', () => {
     const errors = watchBrowserErrors(page)
     await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: '账号登录', exact: true })).toBeVisible()
+    await expect(page.getByPlaceholder('账号')).toBeVisible()
     expect(await page.evaluate(() => navigator.userAgent)).toContain('Mobile')
     await expectIPhonePage(page, errors)
 

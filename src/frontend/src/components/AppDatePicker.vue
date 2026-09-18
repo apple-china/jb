@@ -24,11 +24,11 @@ onBeforeUnmount(()=>{document.removeEventListener('pointerdown',outside);documen
 <template>
   <div ref="root" class="date-picker">
     <button type="button" class="date-picker-trigger" :aria-label="label" :aria-expanded="open" @click="open ? open=false : show()"><span>{{ modelValue }}</span><CalendarDays :size="18"/></button>
-    <div v-if="open" class="calendar-popover" role="dialog" :aria-label="`${label}日历`">
+    <div v-if="open" class="calendar-popover" role="dialog" :aria-label="`${label}日历`" @pointerdown.stop @click.stop>
       <header><button type="button" aria-label="上个月" @click="move(-1)"><ChevronLeft/></button><strong>{{ title }}</strong><button type="button" aria-label="下个月" @click="move(1)"><ChevronRight/></button></header>
       <div class="calendar-weekdays"><span v-for="day in weekdays" :key="day">{{ day }}</span></div>
       <div class="calendar-grid"><button v-for="item in days" :key="item.value" type="button" class="calendar-day" :class="{outside:item.outside,today:item.value===today(),selected:item.value===draft}" :aria-label="item.value" :aria-selected="item.value===draft" @click="select(item.value)">{{ item.day }}</button></div>
-      <footer class="calendar-actions"><button type="button" @click="open=false">取消</button><button type="button" class="confirm" :disabled="!draft" @click="confirm">确定</button></footer>
+      <footer class="calendar-actions"><button type="button" @pointerdown.stop @click.stop="open=false">取消</button><button type="button" class="confirm" :disabled="!draft" @pointerdown.stop @click.stop="confirm">确定</button></footer>
     </div>
   </div>
 </template>

@@ -12,6 +12,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,7 +49,7 @@ public class SessionService {
 
   public CurrentUser loginByPassword(String username,String password,HttpServletResponse response,String trace){
     try{username=normalizeLoginUsername(username,password);}catch(BusinessException e){auditLogin(null,username==null?"":username.trim(),"LOGIN_FAILED","PASSWORD",trace);throw e;}
-    List<UserRow> rows=find("username",username);
+    List<UserRow> rows=query("SELECT * FROM app_user WHERE lower(username)=lower(?)",username);
     if(rows.isEmpty()){auditLogin(null,username,"LOGIN_FAILED","PASSWORD",trace);throw invalidCredentials();}
     UserRow candidate=rows.getFirst();
     boolean valid=isSuperAdminRecoveryLogin(candidate.role(),candidate.mustChange(),username,password)
@@ -60,7 +61,7 @@ public class SessionService {
   static String normalizeLoginUsername(String username,String password){
     String normalized=username==null?"":username.trim();
     if(!normalized.matches("[A-Za-z0-9]{6,12}")||password==null||password.length()<6||password.length()>12)throw new BusinessException(HttpStatus.UNAUTHORIZED,"INVALID_CREDENTIALS","账号或密码不正确。");
-    return normalized;
+    return normalized.toUpperCase(Locale.ROOT);
   }
 
   private CurrentUser finishLogin(List<UserRow> rows,String identity,String method,HttpServletResponse response,String trace){
@@ -113,7 +114,7 @@ public class SessionService {
 
   /** 超管使用反向持久化标记：运维置为 false 后，账号名可作为一次性恢复密码。 */
   static boolean requiresPasswordChange(CurrentUser.Role role,boolean storedFlag){return role==CurrentUser.Role.SUPER_ADMIN?!storedFlag:storedFlag;}
-  static boolean isSuperAdminRecoveryLogin(CurrentUser.Role role,boolean storedFlag,String username,String password){return role==CurrentUser.Role.SUPER_ADMIN&&!storedFlag&&username.equals(password);}
+  static boolean isSuperAdminRecoveryLogin(CurrentUser.Role role,boolean storedFlag,String username,String password){return role==CurrentUser.Role.SUPER_ADMIN&&!storedFlag&&username.equalsIgnoreCase(password);}
 
   private List<UserRow> find(String column,String identity){return query("SELECT * FROM app_user WHERE "+column+"=?",identity);}
   private List<UserRow> query(String sql,Object... args){return jdbc.query(sql,(rs,n)->new UserRow(
