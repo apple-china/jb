@@ -47,6 +47,7 @@ jobs:
             --exclude '.git/' \
             --exclude '.env' \
             --exclude '.env.*' \
+            --exclude '.deployment-backups/' \
             --exclude '.tools/' \
             --exclude '.runtime/' \
             --exclude 'artifacts/database-backups/' \
@@ -55,7 +56,7 @@ jobs:
             -e "ssh -p $DEPLOY_PORT" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei/"
 
-      - name: 构建并启动服务
+      - name: 备份数据库并更新测试服务
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
@@ -65,14 +66,47 @@ jobs:
             set -eu
             cd /opt/stacks/jiabei
             test -s .env.dingtalk-test
-            docker compose \
-              --env-file .env.dingtalk-test \
-              -f docker-compose.yml \
-              -f docker-compose.dingtalk-test.yml \
-              up -d --build --remove-orphans
-            docker compose \
-              --env-file .env.dingtalk-test \
-              -f docker-compose.yml \
-              -f docker-compose.dingtalk-test.yml \
-              ps
+
+            compose="docker compose --env-file .env.dingtalk-test -f docker-compose.yml -f docker-compose.dingtalk-test.yml"
+            $compose config --quiet
+
+            install -d -m 700 .deployment-backups
+            if $compose ps -q db | grep -q .; then
+              database_user=$($compose exec -T db printenv POSTGRES_USER)
+              database_name=$($compose exec -T db printenv POSTGRES_DB)
+              backup_file=".deployment-backups/test-predeploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
+              $compose exec -T db \
+                pg_dump -U "$database_user" -d "$database_name" -Fc \
+                > "$backup_file"
+              chmod 600 "$backup_file"
+              test -s "$backup_file"
+              echo "Created $backup_file"
+            fi
+
+            $compose build backend frontend
+            $compose up -d --remove-orphans
+
+            for service in db backend frontend; do
+              container_id=$($compose ps -q "$service")
+              test -n "$container_id"
+              status=starting
+              for attempt in $(seq 1 24); do
+                status=$(docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" "$container_id")
+                [ "$status" = healthy ] && break
+                [ "$status" = running ] && break
+                [ "$status" = unhealthy ] && break
+                sleep 5
+              done
+              if [ "$status" != healthy ] && [ "$status" != running ]; then
+                $compose logs --no-color --tail=100 "$service"
+                echo "$service failed health validation: $status" >&2
+                exit 1
+              fi
+            done
+
+            $compose exec -T backend \
+              curl -fsS http://127.0.0.1:8080/actuator/health
+            $compose exec -T frontend \
+              wget -q -O /dev/null http://127.0.0.1/
+            $compose ps
           '

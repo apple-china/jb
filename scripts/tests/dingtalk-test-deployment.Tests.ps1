@@ -27,6 +27,7 @@ if (-not (Test-Path -LiteralPath $testComposePath)) {
 }
 
 $testCompose = Get-Content -LiteralPath $testComposePath -Raw
+$deployWorkflow = Get-Content -LiteralPath (Join-Path $root '.github\workflows\deploy-main.yml') -Raw
 
 Assert-Contains $baseCompose 'SPRING_PROFILES_ACTIVE: local' 'Base Compose must keep the local profile.'
 if ($envExample -match '(?m)^DINGTALK_TEST_DATABASE_PASSWORD=[^\r\n]+$') { throw 'Example file must not contain a test database password.' }
@@ -49,6 +50,10 @@ Assert-Contains $testCompose 'MOREDIAN_MAX_EVENTS: ${MOREDIAN_MAX_EVENTS:-60000}
 Assert-Contains $testCompose 'MOREDIAN_CLEANUP_INTERVAL_MS: ${MOREDIAN_CLEANUP_INTERVAL_MS:-604800000}' 'Test backend must clean Moredian events every seven days by default.'
 Assert-Contains $envExample 'MOREDIAN_ORG_AUTH_KEY=' 'Environment example must declare the Moredian auth key.'
 if ($envExample -match '(?m)^MOREDIAN_ORG_AUTH_KEY=[^\r\n]+$') { throw 'Example file must not contain a Moredian auth key.' }
+Assert-Contains $deployWorkflow "--exclude '.deployment-backups/'" 'Test deployment must preserve existing database backups.'
+Assert-Contains $deployWorkflow 'pg_dump -U "$database_user" -d "$database_name" -Fc' 'Test deployment must create a compressed database backup before updating services.'
+Assert-Contains $deployWorkflow 'test -s "$backup_file"' 'Test deployment must reject an empty database backup.'
+Assert-Contains $deployWorkflow 'curl -fsS http://127.0.0.1:8080/actuator/health' 'Test deployment must verify backend health after updating services.'
 Assert-UniqueMigrationVersions @(
   (Join-Path $root 'src\backend\src\main\resources\db\migration'),
   (Join-Path $root 'src\backend\src\main\resources\db\dingtalk-test')
@@ -58,4 +63,4 @@ Assert-UniqueMigrationVersions @(
   (Join-Path $root 'src\backend\src\main\resources\db\local')
 ) 'Local Flyway locations must use unique migration versions.'
 
-Write-Host 'PASS DingTalk test deployment contract (25 cases)'
+Write-Host 'PASS DingTalk test deployment contract (29 cases)'
