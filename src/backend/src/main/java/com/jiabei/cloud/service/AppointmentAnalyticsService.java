@@ -19,7 +19,7 @@ public class AppointmentAnalyticsService {
   public AppointmentAnalyticsService(JdbcTemplate jdbc){this.jdbc=jdbc;}
 
   public Map<String,Object> analytics(CurrentUser actor,LocalDate start,LocalDate end){
-    if(actor.role()!=CurrentUser.Role.SUPER_ADMIN&&actor.role()!=CurrentUser.Role.OPERATOR&&actor.role()!=CurrentUser.Role.OBSERVER)throw BusinessException.forbidden();
+    if(actor.role()!=CurrentUser.Role.SUPER_ADMIN&&actor.role()!=CurrentUser.Role.OPERATOR)throw BusinessException.forbidden();
     if(start==null||end==null||start.isAfter(end)||start.plusDays(366).isBefore(end))throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,"INVALID_ANALYTICS_RANGE","统计日期范围无效或超过 366 天。");
     Map<String,Object> rawSummary=jdbc.queryForMap("""
       SELECT count(*) total,
@@ -61,10 +61,11 @@ public class AppointmentAnalyticsService {
     Map<UUID,Map<String,Object>> streamerRows=new LinkedHashMap<>();
     jdbc.query("""
       SELECT streamer_user_id,max(streamer_name_snapshot),count(*),
+        count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='ARRIVED'),
         count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='LATE'),
         count(*) FILTER (WHERE status='ACTIVE' AND attendance_status='NOT_ARRIVED')
       FROM appointment WHERE booking_date BETWEEN ? AND ? GROUP BY streamer_user_id
-      """,rs->{Map<String,Object> row=new LinkedHashMap<>();UUID id=rs.getObject(1,UUID.class);row.put("streamerId",id);row.put("streamerName",rs.getString(2));row.put("appointments",rs.getLong(3));row.put("late",rs.getLong(4));row.put("notArrived",rs.getLong(5));row.put("modifications",0L);row.put("cancellations",0L);streamerRows.put(id,row);},start,end);
+      """,rs->{Map<String,Object> row=new LinkedHashMap<>();UUID id=rs.getObject(1,UUID.class);row.put("streamerId",id);row.put("streamerName",rs.getString(2));row.put("appointments",rs.getLong(3));row.put("arrived",rs.getLong(4));row.put("late",rs.getLong(5));row.put("notArrived",rs.getLong(6));row.put("modifications",0L);row.put("cancellations",0L);streamerRows.put(id,row);},start,end);
     jdbc.query("""
       SELECT a.streamer_user_id,
         count(*) FILTER (WHERE al.action='MODIFY'),

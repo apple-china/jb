@@ -32,6 +32,8 @@ const makeupArtistId = ref('')
 const teamId = ref('')
 const startTime = ref('')
 const slots = ref<Array<{time:string;available:boolean;conflict?:boolean;reason?:string}>>([])
+const slotsLoading = ref(false)
+let slotsRequest=0
 
 function shanghaiDate(offset = 0) {
   const now = new Date(Date.now() + offset * 86400000)
@@ -43,7 +45,8 @@ const dates = computed(() => [{ label:'今天', value: shanghaiDate() }, { label
 const selectedMakeupArtist = computed(() => context.value?.makeupArtists.find(t => t.id === makeupArtistId.value))
 const makeupArtistOptions = computed(() => context.value?.makeupArtists.map(item => ({value:item.id,label:item.name})) ?? [])
 const teamOptions = computed(() => context.value?.teams.map(item => ({value:item.id,label:item.name})) ?? [])
-const canSubmit = computed(() => !!makeupArtistId.value && !!teamId.value && !!startTime.value && !submitting.value)
+const modifyUnchanged = computed(()=>bookingMode.value==='modify'&&!!context.value?.myAppointment&&makeupArtistId.value===context.value.myAppointment.makeupArtistId&&teamId.value===context.value.myAppointment.teamId&&startTime.value===context.value.myAppointment.startTime)
+const canSubmit = computed(() => !!makeupArtistId.value && !!teamId.value && !!startTime.value && !submitting.value && !slotsLoading.value && !modifyUnchanged.value)
 const emptyText = computed(() => selectedDate.value === shanghaiDate() ? '今天还未预约，选个时间从容准备吧。' : '明天还未预约，提前安排会更从容。')
 const scheduleTitle = computed(() => selectedDate.value === shanghaiDate() ? '今天' : '明天')
 const bookingTitle = computed(() => `${selectedDate.value===shanghaiDate()?'今天':'明天'} · 妆造安排`)
@@ -85,15 +88,21 @@ async function openBooking(mode:'create'|'modify'='create') {
   if (makeupArtistId.value) await loadSlots()
 }
 async function loadSlots() {
+  const request=++slotsRequest
   const previous=startTime.value;startTime.value = ''
   if (!makeupArtistId.value) { slots.value = []; return }
+  slotsLoading.value=true
   try {
-    slots.value = (await api.availability(selectedDate.value, makeupArtistId.value, bookingMode.value==='modify'?context.value?.myAppointment?.id:undefined)).slots
+    const result=await api.availability(selectedDate.value, makeupArtistId.value, bookingMode.value==='modify'?context.value?.myAppointment?.id:undefined)
+    if(request!==slotsRequest)return
+    slots.value = result.slots
     const preferred = bookingMode.value==='modify'?previous:context.value?.defaults.startTime
     if (preferred && slots.value.some(s => s.time === preferred && s.available)) startTime.value = preferred
-  } catch(e){ showApiError(e,'可用时间加载失败。') }
+  } catch(e){if(request!==slotsRequest)return;slots.value=[];showApiError(e,'可用时间加载失败。') }
+  finally{if(request===slotsRequest)slotsLoading.value=false}
 }
 async function saveBooking() {
+  if(modifyUnchanged.value){showToast('预约信息未修改','warning');return}
   if (!canSubmit.value) return
   submitting.value = true
   try {
@@ -155,7 +164,8 @@ onMounted(initialize)
       <div class="form-stack">
         <label><span>化妆师</span><PolishedSelect v-model="makeupArtistId" :options="makeupArtistOptions" placeholder="请选择化妆师" aria-label="化妆师" @change="loadSlots"><template #leading><Sparkles :size="18"/></template></PolishedSelect></label>
         <label><span>团播组</span><PolishedSelect v-model="teamId" :options="teamOptions" placeholder="请选择团播组" aria-label="团播组"><template #leading><UsersRound :size="18"/></template></PolishedSelect></label>
-        <div><span class="field-label">时间</span><TimeWheel v-if="makeupArtistId&&slots.length" v-model="startTime" :slots="slots"/><p v-else class="field-hint time-wheel-empty">选择化妆师后即可查看可预约时间</p></div>
+        <div><span class="field-label">时间</span><div v-if="slotsLoading" class="inline-skeleton"><span/><span/></div><TimeWheel v-else-if="makeupArtistId&&slots.length" v-model="startTime" :slots="slots"/><p v-else class="field-hint time-wheel-empty">{{ makeupArtistId?'暂无可预约时间':'选择化妆师后即可查看可预约时间' }}</p></div>
+        <p v-if="modifyUnchanged" class="field-hint">预约信息未修改</p>
         <p v-if="context?.defaults.message" class="field-hint">{{ context.defaults.message }}</p>
       </div>
       <template #footer><button class="button primary full" :disabled="!canSubmit" @click="saveBooking">{{ submitting ? '提交中…' : `${bookingMode==='modify'?'确认修改':'确认预约'}${selectedMakeupArtist ? ` · ${selectedMakeupArtist.name}` : ''}` }}</button></template>

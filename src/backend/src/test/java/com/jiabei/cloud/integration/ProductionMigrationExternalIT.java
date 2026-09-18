@@ -24,7 +24,7 @@ class ProductionMigrationExternalIT {
     Flyway flyway = Flyway.configure().locations("classpath:db/migration").cleanDisabled(false)
         .dataSource(URL, USER, PASSWORD).load();
     flyway.clean();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(17);
+    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(18);
 
     try (var connection = DriverManager.getConnection(URL, USER, PASSWORD);
          var statement = connection.createStatement()) {

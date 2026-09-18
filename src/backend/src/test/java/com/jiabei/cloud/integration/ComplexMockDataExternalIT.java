@@ -25,7 +25,7 @@ class ComplexMockDataExternalIT {
     Flyway flyway = Flyway.configure().locations("classpath:db/migration", "classpath:db/local")
         .cleanDisabled(false).dataSource(URL, USER, PASSWORD).load();
     flyway.clean();
-    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(18);
+    assertThat(flyway.migrate().migrationsExecuted).isEqualTo(20);
     jdbc = new JdbcTemplate(new DriverManagerDataSource(URL, USER, PASSWORD));
   }
 
@@ -68,9 +68,10 @@ class ComplexMockDataExternalIT {
       assertThat(jdbc.queryForObject("SELECT count(*) FROM app_user WHERE dingtalk_user_id=? AND dingtalk_username=?",
           Integer.class, employee.userId(), employee.username())).isEqualTo(candidate ? 0 : 1);
     }
-    assertThat(count("SELECT count(*) FROM app_user WHERE username ~ '^streamer(2[1-9]|30)$' AND dingtalk_user_id IS NULL AND dingtalk_username IS NULL AND password_hash IS NOT NULL")).isEqualTo(10);
+    assertThat(count("SELECT count(*) FROM app_user WHERE username ~ '^streamer(2[1-9]|30)$' AND dingtalk_user_id IS NULL AND dingtalk_username IS NULL AND password_hash IS NULL AND NOT must_change_password")).isEqualTo(10);
     assertThat(count("SELECT count(*) FROM app_user WHERE username='superadmin' AND id='10000000-0000-0000-0000-000000000001' AND password_hash='{noop}superadmin' AND NOT must_change_password")).isEqualTo(1);
-    assertThat(count("SELECT count(*) FROM app_user WHERE (username,id::text) IN (('operator01','10000000-0000-0000-0000-000000000002'),('observer01','10000000-0000-0000-0000-000000000003'),('makeup01','10000000-0000-0000-0000-000000000004'),('streamer01','10000000-0000-0000-0000-000000000011'),('streamer02','10000000-0000-0000-0000-000000000012'),('streamer03','10000000-0000-0000-0000-000000000013'),('streamer04','10000000-0000-0000-0000-000000000014'))")).isEqualTo(7);
+    assertThat(count("SELECT count(*) FROM app_user WHERE username IS NULL AND (dingtalk_user_id,id::text) IN (('operator01','10000000-0000-0000-0000-000000000002'),('observer01','10000000-0000-0000-0000-000000000003'),('makeup01','10000000-0000-0000-0000-000000000004'),('streamer01','10000000-0000-0000-0000-000000000011'),('streamer02','10000000-0000-0000-0000-000000000012'),('streamer03','10000000-0000-0000-0000-000000000013'),('streamer04','10000000-0000-0000-0000-000000000014'))")).isEqualTo(7);
+    assertThat(count("SELECT count(*) FROM audit_log WHERE action='LEGACY_PASSWORD_REVOKED'")).isEqualTo(50);
   }
 
   @Test void variesPermissionsAndValidSchedules() {
@@ -95,7 +96,7 @@ class ComplexMockDataExternalIT {
     assertThat(count("SELECT count(*) FROM appointment WHERE (status='CANCELLED')<>attendance_frozen OR created_at>updated_at OR updated_at>clock_timestamp()")).isZero();
     assertThat(count("SELECT count(*) FROM appointment WHERE status='CANCELLED' AND (cancel_reason IS NULL OR cancelled_by_user_id IS NULL OR cancelled_at IS NULL OR cancelled_at>=updated_at)")).isZero();
     assertThat(count("SELECT count(*) FROM appointment WHERE status='ACTIVE' AND (cancel_reason IS NOT NULL OR cancelled_at IS NOT NULL OR cancelled_by_user_id IS NOT NULL)")).isZero();
-    assertThat(count("SELECT count(*) FROM appointment WHERE booking_date>=(now() AT TIME ZONE 'Asia/Shanghai')::date AND attendance_status<>'PENDING'")).isZero();
+    assertThat(count("SELECT count(*) FROM appointment WHERE booking_date>(now() AT TIME ZONE 'Asia/Shanghai')::date AND attendance_status<>'PENDING'")).isZero();
   }
 
   @Test void containsAuditHistoryAndAttendanceEvidence() {
@@ -122,7 +123,7 @@ class ComplexMockDataExternalIT {
     assertThat(count("SELECT count(*) FROM daily_card WHERE first_delivered_at IS NULL")).isPositive();
     assertThat(count("SELECT count(*) FROM daily_card WHERE first_delivered_at IS NOT NULL")).isPositive();
     assertThat(count("SELECT count(*) FROM daily_card WHERE group_open_conversation_id='mock-group-001'")).isEqualTo(2);
-    assertThat(count("SELECT count(*) FROM mock_card_delivery WHERE card_data ?& ARRAY['data_date','update_time','appointment_list','summary'] AND private_data ? 'streamer01'")).isPositive();
+    assertThat(count("SELECT count(*) FROM mock_card_delivery WHERE card_data ?& ARRAY['title','summary','date_text','entry_url','schedule_markdown'] AND private_data ? 'streamer01'")).isPositive();
     assertThat(count("SELECT count(*) FROM integration_job j WHERE j.job_type='CARD_REFRESH' AND NOT EXISTS (SELECT 1 FROM daily_card c WHERE j.business_key=c.group_open_conversation_id || '|' || c.business_date)")).isZero();
     assertThat(count("SELECT count(*) FROM mock_card_call_log WHERE result_code='OK'")).isPositive();
     assertThat(count("SELECT count(*) FROM mock_card_call_log WHERE result_code<>'OK'")).isPositive();
