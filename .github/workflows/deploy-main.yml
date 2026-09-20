@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
+      - AGENTS.md
       - .github/workflows/deploy-main.yml
       - .github/workflows/deploy-production.yml
   workflow_dispatch:
