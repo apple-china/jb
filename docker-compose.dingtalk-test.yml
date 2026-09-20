@@ -45,10 +45,11 @@ services:
   frontend:
     build:
       args:
-        VITE_DINGTALK_CLIENT_ID: ${VITE_DINGTALK_CLIENT_ID:?VITE_DINGTALK_CLIENT_ID is required}
-        VITE_DINGTALK_CORP_ID: ${VITE_DINGTALK_CORP_ID:?VITE_DINGTALK_CORP_ID is required}
-        VITE_ENABLE_MOCK_LOGIN: "false"
-        VITE_DINGTALK_AUTO_LOGIN: "true"
+        VITE_MODE: dev
+        DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:?DINGTALK_CLIENT_ID is required}
+        DINGTALK_CORP_ID: ${DINGTALK_CORP_ID:?DINGTALK_CORP_ID is required}
+        DINGTALK_AUTO_LOGIN: ${DINGTALK_AUTO_LOGIN:-true}
+        MOCK_LOGIN_ENABLED: ${MOCK_LOGIN_ENABLED:-false}
 
 volumes:
   jiabei_dingtalk_test_pgdata:

@@ -33,8 +33,8 @@ export default defineConfig({
       ...process.env,
       // Public identifiers only. The JSAPI and one-time code exchange are mocked
       // by Playwright, so no enterprise secret or real DingTalk service is used.
-      VITE_DINGTALK_CLIENT_ID: 'playwright-ios-client',
-      VITE_DINGTALK_CORP_ID: 'playwright-ios-corp',
+      DINGTALK_CLIENT_ID: 'playwright-ios-client',
+      DINGTALK_CORP_ID: 'playwright-ios-corp',
     },
   },
 })

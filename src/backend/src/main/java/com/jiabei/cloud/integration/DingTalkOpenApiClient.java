@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** Minimal DingTalk client shared by SSO and the scheduled directory reconciliation. */
-@Profile({"dingtalk-test", "production"})
+@Profile({"dev", "prod", "dingtalk-test", "production"})
 @ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DingTalkOpenApiClient implements DingTalkIdentityGateway, DingTalkRemoteDirectory {

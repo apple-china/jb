@@ -1,8 +1,10 @@
 # Local environment and integration credentials
 .env
 .env.*
+.env.*.secrets
 !.env.example
-!.env.production.example
+!.env.dev.defaults
+!.env.prod.defaults
 *.local
 secrets/
 

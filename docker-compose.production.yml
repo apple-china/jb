@@ -88,10 +88,11 @@ services:
     build:
       context: ./src/frontend
       args:
-        VITE_DINGTALK_CLIENT_ID: ${VITE_DINGTALK_CLIENT_ID:-}
-        VITE_DINGTALK_CORP_ID: ${VITE_DINGTALK_CORP_ID:-}
-        VITE_ENABLE_MOCK_LOGIN: "false"
-        VITE_DINGTALK_AUTO_LOGIN: ${DINGTALK_ENABLED:-false}
+        VITE_MODE: production
+        DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:-}
+        DINGTALK_CORP_ID: ${DINGTALK_CORP_ID:-}
+        DINGTALK_AUTO_LOGIN: ${DINGTALK_AUTO_LOGIN:-false}
+        MOCK_LOGIN_ENABLED: ${MOCK_LOGIN_ENABLED:-false}
     restart: unless-stopped
     depends_on:
       backend:

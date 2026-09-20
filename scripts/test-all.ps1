@@ -10,6 +10,9 @@ if ($LASTEXITCODE -ne 0) { throw 'DingTalk test deployment contract failed.' }
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\tests\production-deployment.Tests.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Production deployment contract failed.' }
 
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\tests\environment-migration.Tests.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Dev/prod environment migration contract failed.' }
+
 $maven = Get-Command mvn -ErrorAction SilentlyContinue
 if (-not $maven) {
   $portableJdk = Join-Path $root '.tools\jdk\jdk-21.0.12.1+1'

@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Replaces only a complete snapshot. Missing employees are logically deleted and linked accounts are disabled. */
-@Profile({"dingtalk-test", "production"})
+@Profile({"dev", "prod", "dingtalk-test", "production"})
 @ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Service
 public class DingTalkEmployeeSyncService implements ApplicationRunner {

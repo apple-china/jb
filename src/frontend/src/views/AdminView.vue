@@ -18,7 +18,7 @@ import type { AnalyticsData, Appointment, BookingOptions, CurrentUser, MakeupArt
 import { avatarInitial, maskedDingTalkId } from '../utils/display'
 import { dateRangePreset, type RangePreset } from '../utils/dateRanges'
 import { formatLastSeen } from '../utils/lastSeen'
-import { restoreSession, signOut } from '../auth'
+import { isMockLoginEnabled, restoreSession, signOut } from '../auth'
 import makeupAvatar from '../assets/化妆师.webp'
 import streamerAvatar from '../assets/主播.webp'
 import systemAvatar from '../assets/系统人员.webp'
@@ -26,7 +26,7 @@ import systemAvatar from '../assets/系统人员.webp'
 const router = useRouter()
 const route = useRoute()
 const { toast, showToast, showApiError } = useAppToast()
-const mockLoginEnabled = import.meta.env.VITE_ENABLE_MOCK_LOGIN !== 'false' && import.meta.env.MODE !== 'production'
+const mockLoginEnabled = isMockLoginEnabled()
 const user = ref<CurrentUser | null>(null)
 const tab = ref<'appointments' | 'create' | 'analytics' | 'settings'>('appointments')
 const loading = ref(true)

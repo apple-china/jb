@@ -6,12 +6,12 @@ import BrandMark from '../components/BrandMark.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import AppToast from '../components/AppToast.vue'
 import { useAppToast } from '../composables/useAppToast'
-import { authenticateDingTalk, destinationFor, markAuthenticated, showAuthMessage } from '../auth'
+import { authenticateDingTalk, destinationFor, isMockLoginEnabled, markAuthenticated, showAuthMessage } from '../auth'
 import { api, ApiError } from '../api'
 import type { CurrentUser } from '../types'
 const router=useRouter(),route=useRoute(),loading=ref(''),username=ref(''),password=ref(''),forcedUser=ref<CurrentUser|null>(null),newPassword=ref(''),confirmPassword=ref('')
 const {toast,showToast,showApiError}=useAppToast()
-const mockLoginEnabled=import.meta.env.VITE_ENABLE_MOCK_LOGIN!=='false'&&import.meta.env.MODE!=='production'
+const mockLoginEnabled=isMockLoginEnabled()
 const loginReady=computed(()=>/^[A-Za-z0-9]{6,12}$/.test(username.value.trim())&&password.value.length>=6&&password.value.length<=12)
 const changedPasswordReady=computed(()=>newPassword.value.length>=6&&newPassword.value.length<=12&&newPassword.value===confirmPassword.value)
 const accounts=[

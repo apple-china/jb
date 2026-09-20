@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  flyway:
+    locations: classpath:db/migration
+    clean-disabled: true
+    validate-on-migrate: false
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+jiabei:
+  upload-directory: ${UPLOAD_DIRECTORY}
+  booking:
+    group-id: ${DINGTALK_GROUP_OPEN_CONVERSATION_ID}
+    card-template-id: ${DINGTALK_CARD_TEMPLATE_ID}
+    late-card-template-id: ${DINGTALK_LATE_CARD_TEMPLATE_ID:}
+    app-entry-url: ${APP_ENTRY_URL}
+  dingtalk:
+    enabled: ${DINGTALK_ENABLED:true}
+    client-id: ${DINGTALK_CLIENT_ID}
+    client-secret: ${DINGTALK_CLIENT_SECRET}
+    app-id: ${DINGTALK_APP_ID:}
+    agent-id: ${DINGTALK_AGENT_ID:}
+    sync-interval-ms: ${DINGTALK_SYNC_INTERVAL_MS:300000}
+  bootstrap:
+    super-admin:
+      username: ${SUPER_ADMIN_USERNAME:}
+      password: ${SUPER_ADMIN_INITIAL_PASSWORD:}
+      dingtalk-user-id: ${SUPER_ADMIN_DINGTALK_USER_ID:}
+      nickname: ${SUPER_ADMIN_NICKNAME:Admin}
+  security:
+    allowed-origins: ${ALLOWED_ORIGINS}
+    secure-cookie: true
+  moredian:
+    enabled: ${MOREDIAN_ENABLED:true}
+    org-id: ${MOREDIAN_ORG_ID}
+    org-auth-key: ${MOREDIAN_ORG_AUTH_KEY}
+    device-sn: ${MOREDIAN_DEVICE_SN}
+    require-signature: ${MOREDIAN_REQUIRE_SIGNATURE:true}
+

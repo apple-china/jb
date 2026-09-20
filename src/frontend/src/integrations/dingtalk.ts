@@ -21,7 +21,7 @@ declare global {
 
 export function currentDingTalkCorpId(){
   const fromUrl=new URLSearchParams(window.location.search).get('corpid')?.trim()
-  const configured=import.meta.env.VITE_DINGTALK_CORP_ID?.trim()
+  const configured=import.meta.env.DINGTALK_CORP_ID?.trim()
   return fromUrl||configured||'CORPID'
 }
 
@@ -47,8 +47,8 @@ export async function requestDingTalkAuthCode(){
     throw new DingTalkClientError('NOT_IN_DINGTALK','请在钉钉内打开后使用免登。')
   }
 
-  const clientId=import.meta.env.VITE_DINGTALK_CLIENT_ID?.trim()
-  const configuredCorpId=import.meta.env.VITE_DINGTALK_CORP_ID?.trim()
+  const clientId=import.meta.env.DINGTALK_CLIENT_ID?.trim()
+  const configuredCorpId=import.meta.env.DINGTALK_CORP_ID?.trim()
   const urlCorpId=new URLSearchParams(window.location.search).get('corpid')?.trim()
   if(!clientId||(!configuredCorpId&&!urlCorpId)){
     throw new DingTalkClientError('DINGTALK_NOT_CONFIGURED','钉钉免登尚未配置，请联系管理员。')

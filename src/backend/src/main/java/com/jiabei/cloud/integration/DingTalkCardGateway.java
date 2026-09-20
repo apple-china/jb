@@ -21,12 +21,12 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * 钉钉互动卡片真实网关，仅在 dingtalk-test 环境启用。
+ * 钉钉互动卡片真实网关，在 dev/prod 及旧兼容环境中启用。
  *
  * <p>创建时使用“创建并投放”接口，更新时按业务键局部更新卡片数据。
  * 密钥与群、模板标识均来自运行环境，不写入代码或镜像。</p>
  */
-@Profile({"dingtalk-test", "production"})
+@Profile({"dev", "prod", "dingtalk-test", "production"})
 @ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DingTalkCardGateway implements CardGateway {
