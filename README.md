@@ -78,6 +78,12 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 
 ## 配置与发布边界
 
+### 独立生产环境
+
+`production` 分支使用独立的 `docker-compose.production.yml` 和 `.env.production.example`，目标域名为 `https://jbei.huixinghub.top`。生产数据库、数据库用户、网络、上传目录和数据卷均与 `main` 对应的测试环境隔离；真实 `.env.production` 只允许保存在服务器，不得提交。
+
+第一阶段只准备并验证仓库配置，不创建或重置数据库、不部署服务器、不修改反向代理或域名流量。完整边界、后续部署步骤和回滚要求见 [生产环境准备与交付](docs/production-environment.md)。
+
 服务器生成的 `artifacts/database-backups/` 不属于发布制品，GitHub Actions 同步代码时必须保留该目录，禁止由 `rsync --delete` 删除。
 
 ### 钉钉测试环境

@@ -161,7 +161,7 @@ public class OpenApiDocumentation {
   private Map<String,String> errorDescriptions(ErrorProfile profile){
     Map<String,String> errors=new LinkedHashMap<>();
     switch(profile){
-      case LOGIN->{errors.put("400","VALIDATION_FAILED：账号、密码或授权码格式错误。");errors.put("401","INVALID_CREDENTIALS / DINGTALK_AUTH_CODE_INVALID：登录凭据无效。");errors.put("403","USER_NOT_AUTHORIZED：账号未启用或无系统权限。");errors.put("429","LOGIN_RATE_LIMITED：同一来源登录过于频繁。");}
+      case LOGIN->{errors.put("400","VALIDATION_FAILED：账号、密码或授权码格式错误。");errors.put("401","INVALID_CREDENTIALS / DINGTALK_AUTH_CODE_INVALID：登录凭据无效。");errors.put("403","ACCOUNT_DISABLED / ACCOUNT_UNREGISTERED：账号未启用或尚未注册。");errors.put("429","LOGIN_RATE_LIMITED：同一来源登录过于频繁。");}
       case READ->{errors.put("401","AUTH_REQUIRED / SESSION_INVALIDATED：会话缺失、过期或已失效。");errors.put("403","FORBIDDEN / PASSWORD_CHANGE_REQUIRED：角色权限不足或必须先修改初始密码。");}
       case WRITE->{errors.putAll(errorDescriptions(ErrorProfile.READ));errors.put("400","VALIDATION_FAILED：请求体、路径或请求头格式错误。");errors.put("403","CSRF_INVALID / ORIGIN_NOT_ALLOWED / FORBIDDEN：安全校验或角色权限不满足。");}
       case BOOKING->{errors.putAll(errorDescriptions(ErrorProfile.WRITE));errors.put("404","APPOINTMENT_NOT_FOUND：预约不存在或当前账号不可见。");errors.put("409","DAILY_APPOINTMENT_EXISTS / MAKEUP_ARTIST_SLOT_CONFLICT / VERSION_CONFLICT / APPOINTMENT_TERMINAL / REQUEST_IN_PROGRESS：预约状态或并发条件冲突。");errors.put("422","BOOKING_DATE_NOT_ALLOWED / MIN_LEAD_TIME_NOT_MET / TIME_STEP_INVALID / MAKEUP_ARTIST_UNAVAILABLE / TEAM_UNAVAILABLE / STREAMER_UNAVAILABLE：预约业务条件不满足。");}

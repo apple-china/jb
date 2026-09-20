@@ -23,8 +23,8 @@ describe('requestDingTalkAuthCode', () => {
   })
 
   it('passes public configuration to an injected JSAPI and returns its one-time code', async () => {
-    vi.stubEnv('VITE_DINGTALK_CLIENT_ID', 'client-public')
-    vi.stubEnv('VITE_DINGTALK_CORP_ID', 'corp-public')
+    vi.stubEnv('DINGTALK_CLIENT_ID', 'client-public')
+    vi.stubEnv('DINGTALK_CORP_ID', 'corp-public')
     const requestAuthCode = vi.fn((options:{success:(result:{code?:string})=>void}) => options.success({ code: 'one-time-code' }))
     window.dd = { requestAuthCode }
 
@@ -39,8 +39,8 @@ describe('requestDingTalkAuthCode', () => {
   })
 
   it('uses the installed DingTalk SDK when the client does not inject window.dd', async () => {
-    vi.stubEnv('VITE_DINGTALK_CLIENT_ID', 'client-public')
-    vi.stubEnv('VITE_DINGTALK_CORP_ID', 'corp-public')
+    vi.stubEnv('DINGTALK_CLIENT_ID', 'client-public')
+    vi.stubEnv('DINGTALK_CORP_ID', 'corp-public')
     sdk.env.platform = 'ios'
     sdk.requestAuthCode.mockResolvedValue({ code: 'sdk-one-time-code' })
 
@@ -55,8 +55,8 @@ describe('requestDingTalkAuthCode', () => {
   })
 
   it('does not retry when an injected JSAPI fails', async () => {
-    vi.stubEnv('VITE_DINGTALK_CLIENT_ID', 'client-public')
-    vi.stubEnv('VITE_DINGTALK_CORP_ID', 'corp-public')
+    vi.stubEnv('DINGTALK_CLIENT_ID', 'client-public')
+    vi.stubEnv('DINGTALK_CORP_ID', 'corp-public')
     const requestAuthCode = vi.fn((options:{fail:(error:unknown)=>void}) => options.fail(new Error('denied')))
     window.dd = { requestAuthCode }
 

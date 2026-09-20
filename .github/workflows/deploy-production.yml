@@ -1,109 +1,116 @@
-name: 手动部署 production
+name: 手动部署 prod 版本标签
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 要部署的语义化版本标签（例如 v1.0.0）
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: jiabei-production-deploy
+  group: jiabei-prod-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: 备份、上传并更新生产服务
+    name: 验证标签、备份并更新生产服务
+    if: github.ref == 'refs/heads/prod'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
+    environment: prod
     steps:
-      - name: 获取 production 代码
+      - name: 获取指定版本标签
         uses: actions/checkout@v6
         with:
-          ref: production
-
+          ref: refs/tags/${{ inputs.version }}
+          fetch-depth: 0
+      - name: 验证标签属于 prod 历史
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
+          git show-ref --verify --quiet "refs/tags/$VERSION"
+          release_sha=$(git rev-list -n 1 "refs/tags/$VERSION")
+          test "$(git rev-parse HEAD)" = "$release_sha"
+          git fetch --no-tags origin prod:refs/remotes/origin/prod
+          git merge-base --is-ancestor "$release_sha" origin/prod
+          echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
       - name: 配置 SSH
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PROD_DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
         run: |
           set -eu
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-
-      - name: 上传代码并保留生产配置与备份
+      - name: 上传固定版本并保留生产配置与备份
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PROD_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
         run: |
           set -eu
           rsync -az --delete \
-            --exclude '.git/' \
-            --exclude '.env.production' \
-            --exclude '.env.production.pre-*' \
-            --exclude '.env.production.*.bak' \
-            --exclude '.deployment-backups/' \
-            --exclude '.tools/' \
-            --exclude '.runtime/' \
-            --exclude 'artifacts/database-backups/' \
-            --exclude 'uploads/' \
-            --exclude 'downloads/' \
-            -e "ssh -p $DEPLOY_PORT" \
-            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-production/"
-
+            --exclude '.git/' --exclude '.env' \
+            --exclude '.env.dev.secrets' --exclude '.env.prod.secrets' \
+            --exclude '.env.production' --exclude '.env.dingtalk-test' --exclude '.env.*.bak' \
+            --exclude '.deployment-backups/' --exclude '.deployment-version' \
+            --exclude '.tools/' --exclude '.runtime/' --exclude 'artifacts/database-backups/' \
+            --exclude 'uploads/' --exclude 'downloads/' \
+            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei/"
       - name: 备份数据库并更新生产服务
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PROD_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+          VERSION: ${{ inputs.version }}
         run: |
-          set -eu
-          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
             set -eu
-            cd /opt/stacks/jiabei-production
-            test -s .env.production
-
-            compose="docker compose --env-file .env.production -f docker-compose.production.yml"
-            $compose config --quiet
-
+            cd /opt/stacks/jiabei
+            test -s .env.prod.defaults
+            sh scripts/validate-env-secrets.sh .env.prod.secrets \
+              PROD_DATABASE_PASSWORD SUPER_ADMIN_INITIAL_PASSWORD \
+              DINGTALK_CLIENT_SECRET MOREDIAN_ORG_AUTH_KEY
+            compose='docker compose --env-file .env.prod.defaults --env-file .env.prod.secrets -f docker-compose.prod.yml'
+            \$compose config --quiet
             install -d -m 700 .deployment-backups
-            if $compose ps -q db | grep -q .; then
-              backup_file=".deployment-backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
-              $compose exec -T db \
-                pg_dump -U jiabei_production -d jiabei_production -Fc \
-                > "$backup_file"
-              chmod 600 "$backup_file"
-              test -s "$backup_file"
-              echo "Created $backup_file"
-            fi
-
-            $compose build backend frontend
-            $compose up -d --remove-orphans
-
+            container_id=\$(\$compose ps -q db)
+            test -n \"\$container_id\"
+            database_user=\$(\$compose exec -T db printenv POSTGRES_USER)
+            database_name=\$(\$compose exec -T db printenv POSTGRES_DB)
+            backup_file=\".deployment-backups/prod-$VERSION-predeploy-\$(date -u +%Y%m%dT%H%M%SZ).dump\"
+            \$compose exec -T db pg_dump -U \"\$database_user\" -d \"\$database_name\" -Fc > \"\$backup_file\"
+            chmod 600 \"\$backup_file\"
+            test -s \"\$backup_file\"
+            \$compose build backend frontend
+            \$compose up -d --remove-orphans
             for service in db backend frontend; do
-              container_id=$($compose ps -q "$service")
-              test -n "$container_id"
+              service_id=\$(\$compose ps -q \"\$service\")
+              test -n \"\$service_id\"
               status=starting
-              for attempt in $(seq 1 24); do
-                status=$(docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" "$container_id")
-                [ "$status" = healthy ] && break
-                [ "$status" = unhealthy ] && break
+              for attempt in \$(seq 1 24); do
+                status=\$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$service_id\")
+                [ \"\$status\" = healthy ] && break
+                [ \"\$status\" = unhealthy ] && break
                 sleep 5
               done
-              if [ "$status" != healthy ]; then
-                $compose logs --no-color --tail=100 "$service"
-                echo "$service failed health validation: $status" >&2
+              if [ \"\$status\" != healthy ]; then
+                \$compose logs --no-color --tail=100 \"\$service\"
                 exit 1
               fi
             done
-
-            $compose exec -T backend \
-              curl -fsS http://127.0.0.1:8080/actuator/health
-            $compose exec -T frontend \
-              wget -q -O /dev/null http://127.0.0.1/
-            $compose ps
-          '
+            \$compose exec -T backend curl -fsS http://127.0.0.1:8080/actuator/health
+            \$compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/
+            printf '%s\n' '$VERSION $RELEASE_SHA' > .deployment-version
+            chmod 600 .deployment-version
+            \$compose ps
+          "

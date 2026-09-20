@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const iphone15 = devices['iPhone 15']
+const iphone11 = devices['iPhone 11']
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -12,6 +13,7 @@ export default defineConfig({
   projects: [
     { name: 'mobile-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 800 } } },
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 } } },
+    { name: 'iphone11-safari', use: { ...iphone11 } },
     { name: 'iphone15-safari', use: { ...iphone15 } },
     {
       name: 'iphone15-dingtalk',
@@ -31,8 +33,8 @@ export default defineConfig({
       ...process.env,
       // Public identifiers only. The JSAPI and one-time code exchange are mocked
       // by Playwright, so no enterprise secret or real DingTalk service is used.
-      VITE_DINGTALK_CLIENT_ID: 'playwright-ios-client',
-      VITE_DINGTALK_CORP_ID: 'playwright-ios-corp',
+      DINGTALK_CLIENT_ID: 'playwright-ios-client',
+      DINGTALK_CORP_ID: 'playwright-ios-corp',
     },
   },
 })

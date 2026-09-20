@@ -38,10 +38,11 @@ services:
     build:
       context: ./src/frontend
       args:
-        VITE_DINGTALK_CLIENT_ID: ${VITE_DINGTALK_CLIENT_ID:-}
-        VITE_DINGTALK_CORP_ID: ${VITE_DINGTALK_CORP_ID:-}
-        VITE_ENABLE_MOCK_LOGIN: ${VITE_ENABLE_MOCK_LOGIN:-true}
-        VITE_DINGTALK_AUTO_LOGIN: ${VITE_DINGTALK_AUTO_LOGIN:-false}
+        VITE_MODE: local
+        DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID:-}
+        DINGTALK_CORP_ID: ${DINGTALK_CORP_ID:-}
+        DINGTALK_AUTO_LOGIN: ${DINGTALK_AUTO_LOGIN:-false}
+        MOCK_LOGIN_ENABLED: ${MOCK_LOGIN_ENABLED:-true}
     depends_on:
       - backend
     ports:
