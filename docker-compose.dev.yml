@@ -97,8 +97,9 @@ services:
       backend: { condition: service_healthy }
     networks:
       backend-net:
+      proxy-net:
         aliases:
-          - jiabei-production-frontend
+          - jiabei-dev-frontend
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 15s
@@ -120,3 +121,6 @@ networks:
     driver: bridge
   db-access-net:
     driver: bridge
+  proxy-net:
+    external: true
+    name: jiabei-proxy
