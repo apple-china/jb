@@ -129,9 +129,12 @@ jobs:
             done
             \$compose exec -T backend curl -fsS http://127.0.0.1:8080/actuator/health
             \$compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/
-            docker inspect nginx --format '{{json .NetworkSettings.Networks}}' | grep -q '\"jiabei-proxy\"'
+            proxy_members=\$(docker network inspect jiabei-proxy --format '{{range .Containers}}{{println .Name .IPv4Address}}{{end}}')
+            printf '%s\n' "\$proxy_members" | grep -Eq '^nginx[[:space:]]'
             frontend_id=\$(\$compose ps -q frontend)
-            frontend_ip=\$(docker inspect --format '{{(index .NetworkSettings.Networks \"jiabei-proxy\").IPAddress}}' \"\$frontend_id\")
+            frontend_name=\$(docker inspect --format '{{.Name}}' \"\$frontend_id\")
+            frontend_name=\${frontend_name#/}
+            frontend_ip=\$(printf '%s\n' "\$proxy_members" | grep -F "\$frontend_name " | cut -d' ' -f2 | cut -d/ -f1)
             test -n \"\$frontend_ip\"
             proxy_ip=\$(docker exec nginx getent hosts jiabei-prod-frontend | head -n 1 | tr -s ' ' | cut -d' ' -f1)
             test \"\$proxy_ip\" = \"\$frontend_ip\"
