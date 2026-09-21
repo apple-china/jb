@@ -56,6 +56,36 @@ class ProdFlywayCompatibilityTest {
   }
 
   @Test
+  void acceptsExactLegacyV10AlongsidePendingResolvedMigrations() {
+    var legacyFailure = new ProdFlywayCompatibility.ValidationFailure(
+        "10", "reset super admin test credential",
+        ErrorCode.APPLIED_VERSIONED_MIGRATION_NOT_RESOLVED);
+    var pendingFailures = List.of(
+        pendingFailure("18"),
+        pendingFailure("19"),
+        pendingFailure("20"),
+        pendingFailure("21"));
+    var migrations = List.of(
+        legacyV10(LEGACY_CHECKSUM),
+        pendingMigration("18"),
+        pendingMigration("19"),
+        pendingMigration("20"),
+        pendingMigration("21"));
+
+    assertThatCode(() -> ProdFlywayCompatibility.requireSafeValidation(
+        false,
+        List.of(
+            legacyFailure,
+            pendingFailures.get(0),
+            pendingFailures.get(1),
+            pendingFailures.get(2),
+            pendingFailures.get(3)),
+        migrations,
+        LEGACY_CHECKSUM))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
   void rejectsLegacyV10WhenItsChecksumDoesNotMatchTheImmutableScript() {
     assertThatThrownBy(() -> ProdFlywayCompatibility.requireSafeValidation(
         false,
@@ -70,6 +100,19 @@ class ProdFlywayCompatibilityTest {
             "invalidMigrations.errorCodes={APPLIED_VERSIONED_MIGRATION_NOT_RESOLVED=1}")
         .hasMessageContaining("checksum=false")
         .hasMessageContaining("failedAssertions=[legacyV10.checksum]");
+  }
+
+  @Test
+  void rejectsChecksumMismatchEvenWhenLegacyIdentityAndHistoryMatch() {
+    assertThatThrownBy(() -> ProdFlywayCompatibility.requireSafeValidation(
+        false,
+        List.of(new ProdFlywayCompatibility.ValidationFailure(
+            "10", "reset super admin test credential", ErrorCode.CHECKSUM_MISMATCH)),
+        List.of(legacyV10(LEGACY_CHECKSUM)),
+        LEGACY_CHECKSUM))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("blockingMigrations.count=1")
+        .hasMessageContaining("failedAssertions=[blockingMigrations.legacyErrorCode]");
   }
 
   @Test
@@ -93,10 +136,36 @@ class ProdFlywayCompatibilityTest {
         .hasMessageContaining("invalidMigrations.count=2")
         .hasMessageContaining(
             "invalidMigrations.errorCodes={APPLIED_VERSIONED_MIGRATION_NOT_RESOLVED=1, CHECKSUM_MISMATCH=1}")
+        .hasMessageContaining("pendingMigrations.count=0")
+        .hasMessageContaining("blockingMigrations.count=2")
         .hasMessageContaining(
             "legacyV10.matches={version=true, description=true, script=true, type=true, state=true, checksum=true}")
         .hasMessageContaining(
-            "failedAssertions=[invalidMigrations.count, missingMigrations.count]");
+            "failedAssertions=[blockingMigrations.count, missingMigrations.count]");
+  }
+
+  @Test
+  void rejectsAnotherUnresolvedAppliedMigrationEvenWhenPendingMigrationsExist() {
+    var otherMissing = new ProdFlywayCompatibility.AppliedMigration(
+        "7", "unexpected migration", "V7__unexpected_migration.sql",
+        CoreMigrationType.SQL.toString(), MigrationState.MISSING_SUCCESS, 7);
+
+    assertThatThrownBy(() -> ProdFlywayCompatibility.requireSafeValidation(
+        false,
+        List.of(
+            new ProdFlywayCompatibility.ValidationFailure(
+                "10", "reset super admin test credential",
+                ErrorCode.APPLIED_VERSIONED_MIGRATION_NOT_RESOLVED),
+            new ProdFlywayCompatibility.ValidationFailure(
+                "7", "unexpected migration",
+                ErrorCode.APPLIED_VERSIONED_MIGRATION_NOT_RESOLVED),
+            pendingFailure("18")),
+        List.of(legacyV10(LEGACY_CHECKSUM), otherMissing, pendingMigration("18")),
+        LEGACY_CHECKSUM))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("pendingMigrations.count=1")
+        .hasMessageContaining("blockingMigrations.count=2")
+        .hasMessageContaining("failedAssertions=[blockingMigrations.count, missingMigrations.count]");
   }
 
   @Test
@@ -123,5 +192,18 @@ class ProdFlywayCompatibilityTest {
         "10", "reset super admin test credential",
         "V10__reset_super_admin_test_credential.sql",
         CoreMigrationType.SQL.toString(), MigrationState.MISSING_SUCCESS, checksum);
+  }
+
+  private static ProdFlywayCompatibility.ValidationFailure pendingFailure(String version) {
+    return new ProdFlywayCompatibility.ValidationFailure(
+        version, "pending migration " + version,
+        ErrorCode.RESOLVED_VERSIONED_MIGRATION_NOT_APPLIED);
+  }
+
+  private static ProdFlywayCompatibility.AppliedMigration pendingMigration(String version) {
+    return new ProdFlywayCompatibility.AppliedMigration(
+        version, "pending migration " + version,
+        "V" + version + "__pending_migration.sql",
+        CoreMigrationType.SQL.toString(), MigrationState.PENDING, Integer.parseInt(version));
   }
 }
