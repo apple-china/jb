@@ -129,17 +129,9 @@ jobs:
             done
             \$compose exec -T backend curl -fsS http://127.0.0.1:8080/actuator/health
             \$compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/
-            proxy_members=\$(docker network inspect jiabei-proxy --format '{{range .Containers}}{{println .Name .IPv4Address}}{{end}}')
-            printf '%s\n' "\$proxy_members" | grep -Eq '^nginx[[:space:]]'
             frontend_id=\$(\$compose ps -q frontend)
-            frontend_name=\$(docker inspect --format '{{.Name}}' \"\$frontend_id\")
-            frontend_name=\${frontend_name#/}
-            frontend_ip=\$(printf '%s\n' "\$proxy_members" | grep -F "\$frontend_name " | cut -d' ' -f2 | cut -d/ -f1)
-            test -n \"\$frontend_ip\"
-            proxy_ip=\$(docker exec nginx getent hosts jiabei-prod-frontend | head -n 1 | tr -s ' ' | cut -d' ' -f1)
-            test \"\$proxy_ip\" = \"\$frontend_ip\"
-            docker exec nginx curl -fsS --connect-timeout 5 --max-time 10 http://jiabei-prod-frontend:80/ >/dev/null
-            printf '%s\n' '$VERSION $RELEASE_SHA' > .deployment-version
-            chmod 600 .deployment-version
+            test -n \"\$frontend_id\"
+            sh scripts/verify-proxy-route.sh jiabei-proxy nginx \"\$frontend_id\" jiabei-prod-frontend 12 5
+            sh scripts/write-deployment-version.sh .deployment-version '$VERSION' '$RELEASE_SHA'
             \$compose ps
           "

@@ -29,6 +29,8 @@ $frontendEnvTypes = Read-Required 'src\frontend\src\env.d.ts'
 $devWorkflow = Read-Required '.github\workflows\deploy-main.yml'
 $prodWorkflow = Read-Required '.github\workflows\deploy-production.yml'
 $secretValidator = Read-Required 'scripts\validate-env-secrets.sh'
+$proxyGate = Read-Required 'scripts\verify-proxy-route.sh'
+$versionWriter = Read-Required 'scripts\write-deployment-version.sh'
 $gitignore = Read-Required '.gitignore'
 
 Assert-Contains $devCompose 'SPRING_PROFILES_ACTIVE: dev' 'Dev Compose must activate the dev profile.'
@@ -126,11 +128,7 @@ Assert-Contains $devWorkflow '--env-file .env.dev.defaults --env-file .env.dev.s
 Assert-Contains $devWorkflow "--exclude '.env.dev.secrets'" 'Dev rsync must preserve the server secrets file.'
 Assert-Contains $devWorkflow 'sh scripts/validate-env-secrets.sh .env.dev.secrets' 'Dev secrets must be validated before deployment.'
 Assert-Contains $devWorkflow 'docker network inspect jiabei-proxy' 'Dev deployment must fail before sync when the external proxy network is missing.'
-Assert-Matches $devWorkflow 'docker network inspect jiabei-proxy --format [^\r\n]*range \.Containers[^\r\n]*println \.Name \.IPv4Address[^\r\n]*end' 'Dev deployment must enumerate proxy members and CIDRs without a nested Docker network lookup.'
-Assert-Matches $devWorkflow 'grep -Eq [^\r\n]*\^nginx\[\[:space:\]\]' 'Dev deployment must match nginx exactly in the proxy member list.'
-Assert-Matches $devWorkflow 'frontend_name=.*docker inspect --format [^\r\n]*\{\{\.Name\}\}' 'Dev deployment must resolve the frontend container name without a nested network template.'
-Assert-Contains $devWorkflow 'getent hosts jiabei-dev-frontend' 'Dev deployment must resolve the unique dev frontend alias from Nginx.'
-Assert-Contains $devWorkflow 'http://jiabei-dev-frontend:80/' 'Dev deployment must access the unique dev frontend alias from Nginx.'
+Assert-Contains $devWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx "$frontend_id" jiabei-dev-frontend 12 5' 'Dev deployment must use the shared bounded proxy gate.'
 Assert-Contains $prodWorkflow 'environment: prod' 'Production deployment must use the prod GitHub Environment.'
 Assert-Contains $prodWorkflow "if: github.ref == 'refs/heads/prod'" 'Production workflow must only run when dispatched from prod.'
 Assert-Contains $prodWorkflow 'version:' 'Production deployment must require a version input.'
@@ -141,17 +139,21 @@ Assert-Contains $prodWorkflow '--env-file .env.prod.defaults --env-file .env.pro
 Assert-Contains $prodWorkflow "--exclude '.env.prod.secrets'" 'Prod rsync must preserve the server secrets file.'
 Assert-Contains $prodWorkflow 'sh scripts/validate-env-secrets.sh .env.prod.secrets' 'Prod secrets must be validated before deployment.'
 Assert-Contains $prodWorkflow 'docker network inspect jiabei-proxy' 'Production deployment must fail before backup or sync when the external proxy network is missing.'
-Assert-Matches $prodWorkflow 'docker network inspect jiabei-proxy --format [^\r\n]*range \.Containers[^\r\n]*println \.Name \.IPv4Address[^\r\n]*end' 'Production deployment must enumerate proxy members and CIDRs without a nested Docker network lookup.'
-Assert-Matches $prodWorkflow 'grep -Eq [^\r\n]*\^nginx\[\[:space:\]\]' 'Production deployment must match nginx exactly in the proxy member list.'
-Assert-Matches $prodWorkflow 'frontend_name=.*docker inspect --format [^\r\n]*\{\{\.Name\}\}' 'Production deployment must resolve the frontend container name without a nested network template.'
-Assert-Contains $prodWorkflow 'getent hosts jiabei-prod-frontend' 'Production deployment must resolve the unique prod frontend alias from Nginx.'
-Assert-Contains $prodWorkflow 'http://jiabei-prod-frontend:80/' 'Production deployment must access the unique prod frontend alias from Nginx.'
+Assert-Contains $prodWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx \"\$frontend_id\" jiabei-prod-frontend 12 5' 'Production deployment must use the shared bounded proxy gate.'
+Assert-Contains $prodWorkflow 'sh scripts/write-deployment-version.sh .deployment-version ''$VERSION'' ''$RELEASE_SHA''' 'Production deployment must write its marker atomically.'
+Assert-Contains $proxyGate 'docker network inspect "$network_name"' 'The shared proxy gate must inspect the external network.'
+Assert-Contains $proxyGate 'getent hosts "$alias_name"' 'The shared proxy gate must resolve the environment-specific alias from Nginx.'
+Assert-Contains $proxyGate 'http://$alias_name:80/' 'The shared proxy gate must probe the environment-specific alias from Nginx.'
+Assert-Contains $versionWriter 'mv -f -- "$temporary" "$target"' 'The version marker must use same-filesystem atomic replacement.'
 foreach ($workflow in @($devWorkflow, $prodWorkflow)) {
   if ($workflow -match 'index \.NetworkSettings\.Networks' -or
       $workflow -match 'json \.NetworkSettings\.Networks' -or
       $workflow -match '(?m)^\s*eval\s') {
     throw 'Proxy gates must not use nested Docker network templates or eval across YAML, SSH and the remote shell.'
   }
+}
+if ($proxyGate -match '(?m)^\s*eval\s' -or $versionWriter -match '(?m)^\s*eval\s') {
+  throw 'Deployment scripts must not use eval.'
 }
 if ($devWorkflow.Contains('http://frontend:80') -or $prodWorkflow.Contains('http://frontend:80')) {
   throw 'Deployment proxy gates must never target the ambiguous frontend alias.'
