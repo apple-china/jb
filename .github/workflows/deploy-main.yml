@@ -36,6 +36,16 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+      - name: 验证开发代理网络
+        env:
+          DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEV_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -eu
+            docker network inspect jiabei-proxy >/dev/null
+          '
       - name: 上传代码并保留开发配置与备份
         env:
           DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
@@ -96,5 +106,12 @@ jobs:
             done
             $compose exec -T backend curl -fsS http://127.0.0.1:8080/actuator/health
             $compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/
+            docker inspect nginx --format "{{json .NetworkSettings.Networks}}" | grep -q "\"jiabei-proxy\""
+            frontend_id=$($compose ps -q frontend)
+            frontend_ip=$(docker inspect --format "{{(index .NetworkSettings.Networks \"jiabei-proxy\").IPAddress}}" "$frontend_id")
+            test -n "$frontend_ip"
+            proxy_ip=$(docker exec nginx getent hosts jiabei-dev-frontend | head -n 1 | tr -s " " | cut -d" " -f1)
+            test "$proxy_ip" = "$frontend_ip"
+            docker exec nginx curl -fsS --connect-timeout 5 --max-time 10 http://jiabei-dev-frontend:80/ >/dev/null
             $compose ps
           '
