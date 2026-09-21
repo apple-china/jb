@@ -1,10 +1,10 @@
-name: 自动部署 main
+name: 自动部署 dev
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths-ignore:
+      - AGENTS.md
       - .github/workflows/deploy-main.yml
       - .github/workflows/deploy-production.yml
   workflow_dispatch:
@@ -13,66 +13,88 @@ permissions:
   contents: read
 
 concurrency:
-  group: jiabei-main-deploy
+  group: jiabei-dev-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: 上传并重新部署
+    name: 备份、上传并更新开发联调环境
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 45
+    environment: dev
     steps:
       - name: 获取 main 代码
         uses: actions/checkout@v6
-
       - name: 配置 SSH
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEV_DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEV_DEPLOY_SSH_KEY }}
         run: |
+          set -eu
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-
-      - name: 上传代码并保留服务器配置
+      - name: 上传代码并保留开发配置与备份
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEV_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
         run: |
+          set -eu
           rsync -az --delete \
-            --exclude '.git/' \
-            --exclude '.env' \
-            --exclude '.env.*' \
-            --exclude '.tools/' \
-            --exclude '.runtime/' \
-            --exclude 'artifacts/database-backups/' \
-            --exclude 'uploads/' \
-            --exclude 'downloads/' \
-            -e "ssh -p $DEPLOY_PORT" \
-            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei/"
-
-      - name: 构建并启动服务
+            --exclude '.git/' --exclude '.env' \
+            --exclude '.env.dev.secrets' --exclude '.env.prod.secrets' \
+            --exclude '.env.production' --exclude '.env.dingtalk-test' --exclude '.env.*.bak' \
+            --exclude '.deployment-backups/' --exclude '.tools/' --exclude '.runtime/' \
+            --exclude 'artifacts/database-backups/' --exclude 'uploads/' --exclude 'downloads/' \
+            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-production/"
+      - name: 备份数据库并更新开发联调服务
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEV_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
             set -eu
-            cd /opt/stacks/jiabei
-            test -s .env.dingtalk-test
-            docker compose \
-              --env-file .env.dingtalk-test \
-              -f docker-compose.yml \
-              -f docker-compose.dingtalk-test.yml \
-              up -d --build --remove-orphans
-            docker compose \
-              --env-file .env.dingtalk-test \
-              -f docker-compose.yml \
-              -f docker-compose.dingtalk-test.yml \
-              ps
+            cd /opt/stacks/jiabei-production
+            test -s .env.dev.defaults
+            sh scripts/validate-env-secrets.sh .env.dev.secrets \
+              DEV_DATABASE_PASSWORD SUPER_ADMIN_INITIAL_PASSWORD \
+              DINGTALK_CLIENT_SECRET
+            if grep -Eq '^MOREDIAN_ENABLED=true$' .env.dev.defaults; then
+              sh scripts/validate-env-secrets.sh .env.dev.secrets MOREDIAN_ORG_AUTH_KEY
+            fi
+            compose="docker compose --env-file .env.dev.defaults --env-file .env.dev.secrets -f docker-compose.dev.yml"
+            $compose config --quiet
+            install -d -m 700 .deployment-backups
+            if $compose ps -q db | grep -q .; then
+              database_user=$($compose exec -T db printenv POSTGRES_USER)
+              database_name=$($compose exec -T db printenv POSTGRES_DB)
+              backup_file=".deployment-backups/dev-predeploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
+              $compose exec -T db pg_dump -U "$database_user" -d "$database_name" -Fc > "$backup_file"
+              chmod 600 "$backup_file"
+              test -s "$backup_file"
+            fi
+            $compose build backend frontend
+            $compose up -d --remove-orphans
+            for service in db backend frontend; do
+              container_id=$($compose ps -q "$service")
+              test -n "$container_id"
+              status=starting
+              for attempt in $(seq 1 24); do
+                status=$(docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" "$container_id")
+                [ "$status" = healthy ] && break
+                [ "$status" = unhealthy ] && break
+                sleep 5
+              done
+              if [ "$status" != healthy ]; then
+                $compose logs --no-color --tail=100 "$service"
+                exit 1
+              fi
+            done
+            $compose exec -T backend curl -fsS http://127.0.0.1:8080/actuator/health
+            $compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/
+            $compose ps
           '

@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-@Profile({"production","dingtalk-test"}) @Component
+@Profile({"dev","prod","production","dingtalk-test"}) @Component
 public class SuperAdminBootstrap implements ApplicationRunner {
   private final JdbcTemplate jdbc;private final PasswordService passwords;private final String username;private final String password;private final String dingTalkUserId;private final String nickname;
   public SuperAdminBootstrap(JdbcTemplate jdbc,PasswordService passwords,@Value("${jiabei.bootstrap.super-admin.username:}") String username,@Value("${jiabei.bootstrap.super-admin.password:}") String password,@Value("${jiabei.bootstrap.super-admin.dingtalk-user-id:}") String dingTalkUserId,@Value("${jiabei.bootstrap.super-admin.nickname:Admin}") String nickname){this.jdbc=jdbc;this.passwords=passwords;this.username=username;this.password=password;this.dingTalkUserId=dingTalkUserId;this.nickname=nickname;}

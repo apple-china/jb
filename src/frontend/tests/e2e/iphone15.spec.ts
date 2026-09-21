@@ -55,7 +55,7 @@ test.describe('iPhone 15 Safari', () => {
     const errors = watchBrowserErrors(page)
     await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } } }))
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
+    await expect(page.getByPlaceholder('账号')).toBeVisible()
     expect(await page.evaluate(() => navigator.userAgent)).toContain('Mobile')
     await expectIPhonePage(page, errors)
 
@@ -77,6 +77,24 @@ test.describe('iPhone 15 Safari', () => {
     await expect(page.getByLabel('开始日期')).toBeVisible()
     await attachScreenshot(page, testInfo, 'iphone15-safari-admin-filter')
     await expectIPhonePage(page, errors)
+  })
+})
+
+test.describe('mobile bottom-sheet safe area', () => {
+  test('keeps the fixed sheet inside Safari and DingTalk viewports', async ({ page }, testInfo) => {
+    test.skip(!['iphone11-safari','iphone15-safari','iphone15-dingtalk'].includes(testInfo.project.name), 'iPhone layout scenario')
+    await mockAdmin(page)
+    await page.goto('/admin')
+    await page.getByRole('button', { name: '打开账号菜单' }).click()
+    const sheet = page.getByRole('dialog', { name: '退出登录' })
+    await expect(sheet).toBeVisible()
+    const box = await sheet.boundingBox()
+    const viewport = page.viewportSize()
+    expect(box).not.toBeNull()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.height).toBeGreaterThanOrEqual(viewport!.height * .72)
+    expect(box!.height).toBeLessThanOrEqual(viewport!.height * .82)
+    await expect.poll(()=>page.evaluate(()=>document.body.style.overflow)).toBe('hidden')
   })
 })
 

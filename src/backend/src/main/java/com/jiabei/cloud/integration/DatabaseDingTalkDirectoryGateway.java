@@ -8,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /** Account pickers read the last complete local snapshot, so they do not depend on live API latency. */
-@Profile({"dingtalk-test", "production"})
+@Profile({"dev", "prod", "dingtalk-test", "production"})
 @ConditionalOnProperty(name = "jiabei.dingtalk.enabled", havingValue = "true")
 @Component
 public class DatabaseDingTalkDirectoryGateway implements DingTalkDirectoryGateway {

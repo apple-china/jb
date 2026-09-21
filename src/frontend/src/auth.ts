@@ -35,7 +35,15 @@ export function explicitlyLoggedOut() {
 }
 
 export function canAutoDingTalkLogin() {
-  return import.meta.env.VITE_DINGTALK_AUTO_LOGIN !== 'false' && !explicitlyLoggedOut() && isDingTalkEnvironment()
+  return import.meta.env.DINGTALK_AUTO_LOGIN === 'true' && !explicitlyLoggedOut() && isDingTalkEnvironment()
+}
+
+export function isMockLoginEnabled() {
+  const mode = import.meta.env.MODE
+  if (mode === 'prod' || mode === 'production') return false
+  const configured = import.meta.env.MOCK_LOGIN_ENABLED?.trim()
+  if (configured) return configured === 'true'
+  return mode !== 'dev'
 }
 
 export async function restoreSession() {

@@ -48,7 +48,10 @@ public final class OpenApiModels {
     @Schema(title="允许时间重叠",description="创建或修改时是否由有权角色覆盖了时段冲突。",example="false") boolean conflictOverride,
     @Schema(title="版本号",description="乐观锁版本，修改或取消时必须回传最新值。",example="0") int version,
     @Schema(title="是否修改过",description="版本号大于零时为 true。",example="false") boolean changed,
-    @Schema(title="创建时间",description="预约创建时间。",format="date-time") OffsetDateTime createdAt){}
+    @Schema(title="创建时间",description="预约创建时间。",format="date-time") OffsetDateTime createdAt,
+    @Schema(title="取消时间",description="未取消时为空。",format="date-time",nullable=true) OffsetDateTime cancelledAt,
+    @Schema(title="最近修改时间",description="从未修改时为空。",format="date-time",nullable=true) OffsetDateTime modifiedAt,
+    @Schema(title="存在修改记录",description="是否存在至少一条修改审计。") boolean hasModification){}
 
   public record ScheduleEntry(
     @Schema(title="开始时间",description="日程开始时间。",type="string",format="time",example="19:00") LocalTime startTime,
@@ -128,12 +131,20 @@ public final class OpenApiModels {
     @Schema(title="修改前数据",description="JSON 格式的修改前快照。",nullable=true) String before,
     @Schema(title="修改后数据",description="JSON 格式的修改后快照。",nullable=true) String after,
     @Schema(title="操作时间",description="审计记录创建时间。",format="date-time") OffsetDateTime createdAt){}
+  public record Operation(
+    @Schema(title="操作类型",allowableValues={"CREATE","MODIFY","CANCEL"}) String type,
+    @Schema(title="操作人",description="操作发生时的姓名快照。") String actorName,
+    @Schema(title="操作时间",format="date-time") OffsetDateTime createdAt,
+    @Schema(title="操作原因",nullable=true) String reason,
+    @Schema(title="取消时签到状态",allowableValues={"PENDING","ARRIVED","NOT_ARRIVED","LATE"},nullable=true) String attendanceSnapshot,
+    @ArraySchema(arraySchema=@Schema(title="变更内容"),schema=@Schema(implementation=Change.class)) List<Change> changes){}
   public record AppointmentDetail(
     @Schema(title="创建来源",description="创建预约的角色。",allowableValues={"STREAMER","SUPER_ADMIN","OPERATOR","MAKEUP"}) String source,
     @Schema(title="创建人",description="优先使用创建审计中的员工姓名快照。") String createdByName,
     @Schema(title="取消时间",description="未取消时为空。",format="date-time",nullable=true) OffsetDateTime cancelledAt,
     @Schema(title="取消原因",description="未填写或未取消时为空。",nullable=true) String cancelReason,
     @Schema(title="取消人",description="未取消时为空。",nullable=true) String cancelledByName,
+    @ArraySchema(arraySchema=@Schema(title="统一操作记录",description="创建、修改和取消按时间倒序排列。"),schema=@Schema(implementation=Operation.class)) List<Operation> operations,
     @ArraySchema(arraySchema=@Schema(title="结构化修改记录",description="按时间倒序排列。"),schema=@Schema(implementation=Modification.class)) List<Modification> modifications,
     @ArraySchema(arraySchema=@Schema(title="原始审计记录",description="为兼容旧客户端保留。"),schema=@Schema(implementation=Audit.class)) List<Audit> audits){}
 
@@ -169,7 +180,7 @@ public final class OpenApiModels {
     @Schema(title="上班时间",description="排班启用时的工作开始时间。",type="string",format="time",example="08:00") LocalTime workStart,@Schema(title="下班时间",description="排班启用时的工作结束时间。",type="string",format="time",example="20:00") LocalTime workEnd,
     @Schema(title="排班启用",description="关闭时忽略工作日与时间限制，按全天可约处理。") boolean scheduleEnabled,@Schema(title="出勤",description="关闭时不可预约。") boolean attending,
     @Schema(title="资源启用",description="关闭时不可预约。") boolean active,@Schema(title="版本号",description="乐观锁版本。") int version,@Schema(title="更新时间",description="资源更新时间。",format="date-time") OffsetDateTime updatedAt){}
-  public record Team(@Schema(title="团队 ID",description="团队主键。",format="uuid") UUID id,@Schema(title="名称",description="团队显示名称。") String name,@Schema(title="图标地址",description="团队图标文件地址。",nullable=true) String logoUrl,@Schema(title="启用",description="停用团队不可用于预约。") boolean active,@Schema(title="版本号",description="乐观锁版本。") int version,@Schema(title="更新时间",description="团队更新时间。",format="date-time") OffsetDateTime updatedAt){}
+  public record Team(@Schema(title="团队 ID",description="团队主键。",format="uuid") UUID id,@Schema(title="团队编号",description="新建团队从 100001 起分配的永久六位编号；历史团队为空。",nullable=true) Integer teamNo,@Schema(title="名称",description="团队显示名称。") String name,@Schema(title="图标地址",description="团队图标文件地址。",nullable=true) String logoUrl,@Schema(title="启用",description="停用团队不可用于预约。") boolean active,@Schema(title="版本号",description="乐观锁版本。") int version,@Schema(title="更新时间",description="团队更新时间。",format="date-time") OffsetDateTime updatedAt){}
   public record Streamer(@Schema(title="主播身份",description="钉钉用户 ID 或兼容账号。") String userId,@Schema(title="昵称",description="主播显示名称。") String nickname,@Schema(title="出勤",description="是否允许预约。") boolean attending,@Schema(title="已绑定钉钉",description="是否使用钉钉身份创建。") boolean dingTalkBound){}
   public record Setting(@Schema(title="入口启用",description="系统预约入口是否开放。") boolean enabled,@Schema(title="版本号",description="乐观锁版本。") int version,@Schema(title="更新时间",description="设置更新时间。",format="date-time") OffsetDateTime updatedAt){}
   public record Employee(@Schema(title="钉钉用户 ID",description="未注册员工的钉钉唯一标识。") String dingTalkUserId,@Schema(title="钉钉姓名",description="钉钉通讯录姓名。") String dingTalkUsername,@Schema(title="显示标签",description="姓名与 ID 组合显示文本。") String label){}

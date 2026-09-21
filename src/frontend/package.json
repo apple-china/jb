@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vue-tsc -b && vite build",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "dev": "vite --config vite.config.ts --host 127.0.0.1",
+    "build": "vue-tsc -b && vite build --config vite.config.ts",
+    "test": "vitest --config vite.config.ts run",
+    "test:watch": "vitest --config vite.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:iphone15:safari": "playwright test tests/e2e/iphone15.spec.ts --project=iphone15-safari",
     "test:e2e:iphone15:dingtalk": "playwright test tests/e2e/iphone15.spec.ts --project=iphone15-dingtalk"

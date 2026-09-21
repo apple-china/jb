@@ -21,7 +21,7 @@ class SessionServiceTest {
   }
 
   @Test void loginAcceptsTrimmedAlphanumericUsernameFromSixToTwelveCharacters(){
-    assertThatCode(()->SessionService.normalizeLoginUsername(" Abc123 ","123456")).doesNotThrowAnyException();
+    assertThat(SessionService.normalizeLoginUsername(" Abc123 ","123456")).isEqualTo("ABC123");
     assertThatThrownBy(()->SessionService.normalizeLoginUsername(" 12345 ","123456")).isInstanceOf(BusinessException.class);
     assertThatThrownBy(()->SessionService.normalizeLoginUsername("abc_123","123456")).isInstanceOf(BusinessException.class);
     assertThatThrownBy(()->SessionService.normalizeLoginUsername("abcdefghijklm","123456")).isInstanceOf(BusinessException.class);
@@ -41,6 +41,12 @@ class SessionServiceTest {
   @Test void regularAccountKeepsExistingPasswordChangeMeaning(){
     assertThat(SessionService.requiresPasswordChange(CurrentUser.Role.STREAMER,true)).isTrue();
     assertThat(SessionService.requiresPasswordChange(CurrentUser.Role.STREAMER,false)).isFalse();
+  }
+
+  @Test void forcedPasswordChangeOnlyAppliesToPasswordSessions(){
+    SessionService.UserRow row=new SessionService.UserRow(UUID.randomUUID(),"streamer01","hash","ding01","主播",CurrentUser.Role.STREAMER,null,true,false,false,false,true,0);
+    assertThat(row.current("csrf",true).mustChangePassword()).isTrue();
+    assertThat(row.current("csrf",false).mustChangePassword()).isFalse();
   }
 
   @Test void makeupCreatePermissionFollowsStoredFlag(){
