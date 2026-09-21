@@ -99,7 +99,10 @@ services:
     ports:
       - "127.0.0.1:5173:80"
     networks:
-      - backend-net
+      backend-net:
+      proxy-net:
+        aliases:
+          - jiabei-prod-frontend
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 15s
@@ -119,3 +122,6 @@ networks:
     internal: true
   outbound-net:
     driver: bridge
+  proxy-net:
+    external: true
+    name: jiabei-proxy

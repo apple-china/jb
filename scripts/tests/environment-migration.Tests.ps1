@@ -11,6 +11,10 @@ function Assert-Contains([string]$Content, [string]$Expected, [string]$Message) 
   if (-not $Content.Contains($Expected)) { throw $Message }
 }
 
+function Assert-Matches([string]$Content, [string]$Pattern, [string]$Message) {
+  if ($Content -notmatch $Pattern) { throw $Message }
+}
+
 $devCompose = Read-Required 'docker-compose.dev.yml'
 $prodCompose = Read-Required 'docker-compose.prod.yml'
 $devConfig = Read-Required 'src\backend\src\main\resources\application-dev.yml'
@@ -42,6 +46,11 @@ Assert-Contains $prodCompose 'jiabei_dingtalk_test_uploads:/app/uploads' 'Prod m
 Assert-Contains $prodCompose '"127.0.0.1:5432:5432"' 'Prod PostgreSQL must bind only to loopback.'
 Assert-Contains $prodCompose '"127.0.0.1:8080:8080"' 'Prod backend must bind only to loopback.'
 Assert-Contains $prodCompose '"127.0.0.1:5173:80"' 'Prod frontend must bind only to loopback.'
+Assert-Matches $devCompose '(?ms)^  frontend:.*?^    networks:\s*\r?\n      backend-net:\s*\r?\n      proxy-net:\s*\r?\n        aliases:\s*\r?\n          - jiabei-dev-frontend\s*$' 'Dev frontend must join the backend and external proxy networks with its unique alias.'
+Assert-Matches $prodCompose '(?ms)^  frontend:.*?^    networks:\s*\r?\n      backend-net:\s*\r?\n      proxy-net:\s*\r?\n        aliases:\s*\r?\n          - jiabei-prod-frontend\s*$' 'Prod frontend must join the backend and external proxy networks with its unique alias.'
+foreach ($composeContent in @($devCompose, $prodCompose)) {
+  Assert-Matches $composeContent '(?ms)^  proxy-net:\s*\r?\n    external: true\s*\r?\n    name: jiabei-proxy\s*$' 'Each environment must use the shared external jiabei-proxy network.'
+}
 Assert-Contains $frontendDockerfile 'ARG VITE_MODE=dev' 'Frontend image must declare an explicit Vite mode.'
 Assert-Contains $frontendDockerfile 'ARG DINGTALK_CLIENT_ID=' 'Frontend image must use the unified public Client ID name.'
 Assert-Contains $frontendDockerfile 'ARG DINGTALK_CORP_ID=' 'Frontend image must use the unified public Corp ID name.'
@@ -116,6 +125,12 @@ Assert-Contains $devWorkflow '/opt/stacks/jiabei-production/' 'Dev deployment mu
 Assert-Contains $devWorkflow '--env-file .env.dev.defaults --env-file .env.dev.secrets' 'Dev deployment must load defaults before secrets.'
 Assert-Contains $devWorkflow "--exclude '.env.dev.secrets'" 'Dev rsync must preserve the server secrets file.'
 Assert-Contains $devWorkflow 'sh scripts/validate-env-secrets.sh .env.dev.secrets' 'Dev secrets must be validated before deployment.'
+Assert-Contains $devWorkflow 'docker network inspect jiabei-proxy' 'Dev deployment must fail before sync when the external proxy network is missing.'
+Assert-Matches $devWorkflow 'docker network inspect jiabei-proxy --format [^\r\n]*range \.Containers[^\r\n]*println \.Name \.IPv4Address[^\r\n]*end' 'Dev deployment must enumerate proxy members and CIDRs without a nested Docker network lookup.'
+Assert-Matches $devWorkflow 'grep -Eq [^\r\n]*\^nginx\[\[:space:\]\]' 'Dev deployment must match nginx exactly in the proxy member list.'
+Assert-Matches $devWorkflow 'frontend_name=.*docker inspect --format [^\r\n]*\{\{\.Name\}\}' 'Dev deployment must resolve the frontend container name without a nested network template.'
+Assert-Contains $devWorkflow 'getent hosts jiabei-dev-frontend' 'Dev deployment must resolve the unique dev frontend alias from Nginx.'
+Assert-Contains $devWorkflow 'http://jiabei-dev-frontend:80/' 'Dev deployment must access the unique dev frontend alias from Nginx.'
 Assert-Contains $prodWorkflow 'environment: prod' 'Production deployment must use the prod GitHub Environment.'
 Assert-Contains $prodWorkflow "if: github.ref == 'refs/heads/prod'" 'Production workflow must only run when dispatched from prod.'
 Assert-Contains $prodWorkflow 'version:' 'Production deployment must require a version input.'
@@ -125,6 +140,31 @@ Assert-Contains $prodWorkflow '/opt/stacks/jiabei/' 'Production deployment must 
 Assert-Contains $prodWorkflow '--env-file .env.prod.defaults --env-file .env.prod.secrets' 'Prod deployment must load defaults before secrets.'
 Assert-Contains $prodWorkflow "--exclude '.env.prod.secrets'" 'Prod rsync must preserve the server secrets file.'
 Assert-Contains $prodWorkflow 'sh scripts/validate-env-secrets.sh .env.prod.secrets' 'Prod secrets must be validated before deployment.'
+Assert-Contains $prodWorkflow 'docker network inspect jiabei-proxy' 'Production deployment must fail before backup or sync when the external proxy network is missing.'
+Assert-Matches $prodWorkflow 'docker network inspect jiabei-proxy --format [^\r\n]*range \.Containers[^\r\n]*println \.Name \.IPv4Address[^\r\n]*end' 'Production deployment must enumerate proxy members and CIDRs without a nested Docker network lookup.'
+Assert-Matches $prodWorkflow 'grep -Eq [^\r\n]*\^nginx\[\[:space:\]\]' 'Production deployment must match nginx exactly in the proxy member list.'
+Assert-Matches $prodWorkflow 'frontend_name=.*docker inspect --format [^\r\n]*\{\{\.Name\}\}' 'Production deployment must resolve the frontend container name without a nested network template.'
+Assert-Contains $prodWorkflow 'getent hosts jiabei-prod-frontend' 'Production deployment must resolve the unique prod frontend alias from Nginx.'
+Assert-Contains $prodWorkflow 'http://jiabei-prod-frontend:80/' 'Production deployment must access the unique prod frontend alias from Nginx.'
+foreach ($workflow in @($devWorkflow, $prodWorkflow)) {
+  if ($workflow -match 'index \.NetworkSettings\.Networks' -or
+      $workflow -match 'json \.NetworkSettings\.Networks' -or
+      $workflow -match '(?m)^\s*eval\s') {
+    throw 'Proxy gates must not use nested Docker network templates or eval across YAML, SSH and the remote shell.'
+  }
+}
+if ($devWorkflow.Contains('http://frontend:80') -or $prodWorkflow.Contains('http://frontend:80')) {
+  throw 'Deployment proxy gates must never target the ambiguous frontend alias.'
+}
+$prodDump = $prodWorkflow.IndexOf('pg_dump')
+$prodRestoreList = $prodWorkflow.IndexOf('pg_restore --list')
+$prodSync = $prodWorkflow.IndexOf('rsync -az --delete')
+$prodServiceUpdate = $prodWorkflow.IndexOf('$compose build backend frontend')
+if ($prodDump -lt 0 -or $prodRestoreList -lt 0 -or $prodSync -lt 0 -or $prodServiceUpdate -lt 0 -or
+    -not ($prodDump -lt $prodRestoreList -and $prodRestoreList -lt $prodSync -and $prodSync -lt $prodServiceUpdate)) {
+  throw 'Production backup and pg_restore catalog validation must complete before code sync and service update.'
+}
+Assert-Matches $prodWorkflow 'test -s \\"\\\$backup_file\\"\s*\r?\n\s*\\\$compose exec -T db pg_restore --list < \\"\\\$backup_file\\"' 'Production must validate the new backup catalog immediately after confirming the dump is non-empty.'
 if ($prodWorkflow -match '(?m)^\s+push:' -or $prodWorkflow -match 'ref:\s+prod\s*$') {
   throw 'Production deployment must remain manual and must not deploy a floating prod HEAD.'
 }
