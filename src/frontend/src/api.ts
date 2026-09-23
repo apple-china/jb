@@ -4,7 +4,7 @@ const API = '/api/v1'
 let csrfToken = sessionStorage.getItem('jiabei-csrf') ?? ''
 
 export class ApiError extends Error {
-  constructor(public code: string, message: string, public status: number, public data?: unknown) {
+  constructor(public code: string, message: string, public status: number, public data?: unknown, public traceId?: string) {
     super(message)
   }
 }
@@ -18,7 +18,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     if ((response.status === 401 || payload?.error?.code === 'SESSION_INVALIDATED') && path !== '/me' && path !== '/logout' && !path.startsWith('/auth/')) window.dispatchEvent(new CustomEvent('jiabei:session-expired'))
     if (['SYSTEM_DISABLED','ACCOUNT_DISABLED','ACCOUNT_UNREGISTERED','FORBIDDEN'].includes(payload?.error?.code) && !path.startsWith('/auth/')) window.dispatchEvent(new CustomEvent('jiabei:access-restricted',{detail:{reason:payload.error.code}}))
-    throw new ApiError(payload?.error?.code ?? 'NETWORK_ERROR', payload?.error?.message ?? '请求失败，请稍后重试。', response.status, payload?.data)
+    throw new ApiError(payload?.error?.code ?? 'NETWORK_ERROR', payload?.error?.message ?? '请求失败，请稍后重试。', response.status, payload?.data, payload?.traceId)
   }
   return payload.data as T
 }
