@@ -8,7 +8,7 @@ if ($nginx -notmatch 'location\s*=\s*/index\.html[\s\S]*?Cache-Control[\s\S]*?no
 if ($nginx -notmatch 'location\s*=\s*/\s*\{[\s\S]*?Cache-Control[\s\S]*?no-cache, must-revalidate') {
   throw 'The HTML root must explicitly use no-cache, must-revalidate.'
 }
-$hashedStart = $nginx.IndexOf('location ~* ^/assets/')
+$hashedStart = $nginx.IndexOf('location ~* "^/assets/')
 $fallbackStart = $nginx.IndexOf('location /assets/')
 if ($hashedStart -lt 0 -or $fallbackStart -le $hashedStart) {
   throw 'Hashed and non-hashed asset locations must both exist in the expected order.'
