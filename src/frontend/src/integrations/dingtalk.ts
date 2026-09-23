@@ -4,6 +4,8 @@ export class DingTalkClientError extends Error {
   constructor(public code:string,message:string){super(message)}
 }
 
+export const DINGTALK_AUTH_TIMEOUT_MS = 10_000
+
 type InjectedDingTalkApi = {
   requestAuthCode:(options:{
     clientId:string
@@ -29,14 +31,25 @@ export function isDingTalkEnvironment(){
   return !!window.dd?.requestAuthCode||dingTalkSdk.env.platform!=='notInDingTalk'
 }
 
+function boundedAuthorization(register:(resolve:(code:string)=>void,reject:(error:unknown)=>void)=>void){
+  return new Promise<string>((resolve,reject)=>{
+    let settled=false
+    const finish=(action:()=>void)=>{if(settled)return;settled=true;window.clearTimeout(timer);action()}
+    const timer=window.setTimeout(()=>finish(()=>reject(new DingTalkClientError('DINGTALK_AUTH_TIMEOUT','钉钉免登超时，请重新尝试。'))),DINGTALK_AUTH_TIMEOUT_MS)
+    try{
+      register(
+        code=>finish(()=>code?resolve(code):reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','钉钉授权信息无效'))),
+        ()=>finish(()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。'))),
+      )
+    }catch{finish(()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')))}
+  })
+}
+
 async function requestFromInjectedApi(api:InjectedDingTalkApi,clientId:string,corpId:string){
-  return new Promise<string>((resolve,reject)=>api.requestAuthCode({
-    clientId,
-    corpId,
-    success:result=>result.code
-      ? resolve(result.code)
-      : reject(new DingTalkClientError('DINGTALK_CODE_EMPTY','钉钉授权信息无效')),
-    fail:()=>reject(new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')),
+  return boundedAuthorization((resolve,reject)=>api.requestAuthCode({
+    clientId,corpId,
+    success:result=>resolve(result.code??''),
+    fail:reject,
   }))
 }
 
@@ -64,9 +77,10 @@ export async function requestDingTalkAuthCode(){
 
   try{
     // requestAuthCode 无需 dd.config，授权码只能使用一次，取得后立即交给后端换取用户身份。
-    const result=await dingTalkSdk.requestAuthCode({clientId,corpId})
-    if(!result.code)throw new DingTalkClientError('DINGTALK_CODE_EMPTY','钉钉授权信息无效')
-    return {authCode:result.code,corpId}
+    const code=await boundedAuthorization((resolve,reject)=>{
+      void dingTalkSdk.requestAuthCode({clientId,corpId}).then(result=>resolve(result.code??''),reject)
+    })
+    return {authCode:code,corpId}
   }catch(error){
     if(error instanceof DingTalkClientError)throw error
     throw new DingTalkClientError('DINGTALK_AUTH_FAILED','钉钉免登失败，请重试。')

@@ -2,10 +2,13 @@ import { reactive } from 'vue'
 import { api, ApiError } from './api'
 import type { CurrentUser } from './types'
 import { isDingTalkEnvironment, requestDingTalkAuthCode } from './integrations/dingtalk'
+import { diagnosticErrorCode, diagnosticId, diagnosticTraceId, recordDiagnostic } from './diagnostics'
 
 const LOGOUT_SUPPRESS_KEY = 'jiabei-explicit-logout'
+const DINGTALK_FAILURE_KEY = 'jiabei-dingtalk-failure'
 let cachedUser: CurrentUser | null = null
 let restoring: Promise<CurrentUser> | null = null
+let dingTalkAuthentication: Promise<CurrentUser> | null = null
 let messageTimer: number | undefined
 
 export const authUi = reactive({ checking: false, message: '', kind: 'info' as 'info' | 'success' | 'warning' | 'error' })
@@ -48,13 +51,70 @@ export function isMockLoginEnabled() {
 
 export async function restoreSession() {
   if (cachedUser) return cachedUser
-  if (!restoring) restoring = api.me().then(markAuthenticated).finally(() => { restoring = null })
+  if (!restoring) {
+    recordDiagnostic('SESSION_RESTORE_STARTED')
+    restoring = api.me()
+      .then(user => { recordDiagnostic('SESSION_RESTORE_SUCCEEDED'); return markAuthenticated(user) })
+      .catch(error => { recordDiagnostic('SESSION_RESTORE_FAILED', { errorCode: error }); throw error })
+      .finally(() => { restoring = null })
+  }
   return restoring
 }
 
-export async function authenticateDingTalk() {
-  const { authCode, corpId } = await requestDingTalkAuthCode()
-  return markAuthenticated(await api.dingTalkLogin(authCode, corpId))
+export function authenticateDingTalk() {
+  if (dingTalkAuthentication) return dingTalkAuthentication
+  const started=performance.now()
+  recordDiagnostic('DINGTALK_AUTH_STARTED')
+  const operation=(async()=>{
+    try{
+      const { authCode, corpId } = await requestDingTalkAuthCode()
+      recordDiagnostic('BACKEND_LOGIN_STARTED',{elapsedMs:performance.now()-started})
+      const user=markAuthenticated(await api.dingTalkLogin(authCode, corpId))
+      recordDiagnostic('BACKEND_LOGIN_SUCCEEDED',{elapsedMs:performance.now()-started})
+      recordDiagnostic('DINGTALK_AUTH_SUCCEEDED',{elapsedMs:performance.now()-started})
+      return user
+    }catch(error){
+      recordDiagnostic('DINGTALK_AUTH_FAILED',{elapsedMs:performance.now()-started,errorCode:error})
+      throw error
+    }
+  })()
+  let shared:Promise<CurrentUser>
+  shared=operation.finally(()=>{if(dingTalkAuthentication===shared)dingTalkAuthentication=null})
+  dingTalkAuthentication=shared
+  return shared
+}
+
+export type DingTalkFailureDetails = {
+  code: string
+  diagnosticId: string
+  serverTraceId?: string
+}
+
+export function dingTalkFailureDetails(error:unknown):DingTalkFailureDetails{
+  const serverTraceId=diagnosticTraceId(error)
+  return {code:diagnosticErrorCode(error),diagnosticId:diagnosticId(),...(serverTraceId?{serverTraceId}:{})}
+}
+
+export function rememberDingTalkFailure(error:unknown){
+  const details=dingTalkFailureDetails(error)
+  try{sessionStorage.setItem(DINGTALK_FAILURE_KEY,JSON.stringify(details))}catch{/* Recovery remains available in memory for the current caller. */}
+  return details
+}
+
+export function readDingTalkFailure():DingTalkFailureDetails|null{
+  try{
+    const value=JSON.parse(sessionStorage.getItem(DINGTALK_FAILURE_KEY)??'null') as Partial<DingTalkFailureDetails>|null
+    if(!value||typeof value!=='object')return null
+    const code=diagnosticErrorCode(value.code)
+    const diagnosticIdValue=typeof value.diagnosticId==='string'&&/^[A-Za-z0-9-]{8,80}$/.test(value.diagnosticId)?value.diagnosticId:''
+    if(!diagnosticIdValue)return null
+    const serverTraceId=typeof value.serverTraceId==='string'&&/^[A-Za-z0-9-]{8,64}$/.test(value.serverTraceId)?value.serverTraceId:undefined
+    return {code,diagnosticId:diagnosticIdValue,...(serverTraceId?{serverTraceId}:{})}
+  }catch{return null}
+}
+
+export function clearDingTalkFailure(){
+  try{sessionStorage.removeItem(DINGTALK_FAILURE_KEY)}catch{/* Storage is optional. */}
 }
 
 export async function signOut() {

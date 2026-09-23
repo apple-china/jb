@@ -102,8 +102,14 @@ test.describe('iPhone 15 DingTalk micro-app', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'iphone15-dingtalk') return
     await page.addInitScript(() => {
+      let authorizationCalls = 0
       window.dd = {
-        requestAuthCode: options => options.success({ code: 'ios-dingtalk-code' }),
+        requestAuthCode: options => {
+          authorizationCalls += 1
+          const mode = new URLSearchParams(location.search).get('authMode')
+          if (mode === 'hang-once' && authorizationCalls === 1) return
+          options.success({ code: 'ios-dingtalk-code' })
+        },
       }
     })
   })
@@ -143,5 +149,27 @@ test.describe('iPhone 15 DingTalk micro-app', () => {
     await expect(page.locator('.app-toast-error')).toContainText('免登异常，请联系管理员')
     await attachScreenshot(page, testInfo, 'iphone15-dingtalk-auth-failure')
     await expectIPhonePage(page, errors)
+  })
+
+  test('leaves a timed-out overlay and allows a successful manual retry', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'iphone15-dingtalk', 'DingTalk-only scenario')
+    await page.route('**/api/v1/me', route => route.fulfill({ status: 401, json: { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' }, traceId: 'server-trace' } }))
+    await page.route('**/api/v1/auth/dingtalk-login', route => route.fulfill({ json: { success: true, data: { userId: 'streamer01', nickname: '玲玲', role: 'STREAMER', csrfToken: 'csrf' }, traceId: 'login-trace' } }))
+    await page.route('**/api/v1/booking-context**', route => route.fulfill({ json: { success: true, data: {
+      selectedDate: today, recommendedDate: today, writeEnabled: true, myAppointment: null, cancelledAppointments: [],
+      operationCounts: { cancelCount: 0, modifyCount: 0 }, dailySchedule: [], makeupArtists: [], teams: [], defaults: {},
+      rules: { stepMinutes: 10, durationMinutes: 20, leadMinutes: 20, cancelLimit: 2, modifyLimit: 3 },
+    } } }))
+
+    await page.goto('/login?authMode=hang-once')
+    await expect(page.locator('.auth-overlay')).toBeVisible()
+    const retry = page.getByRole('button', { name: '重新免登' })
+    await expect(retry).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.auth-overlay')).toHaveCount(0)
+    await expect(page.locator('.dingtalk-diagnostic')).toContainText('DINGTALK_AUTH_TIMEOUT')
+    expect(page.url()).not.toMatch(/diagnostic|traceId|diagnosticId|diagnosticCode/i)
+    await retry.click()
+    await page.waitForURL('**/booking**')
+    await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
   })
 })
