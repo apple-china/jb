@@ -26,7 +26,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm exec vite --host 127.0.0.1 --port 5174',
+    command: 'node scripts/e2e-server.mjs',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: true,
     env: {
@@ -35,6 +35,8 @@ export default defineConfig({
       // by Playwright, so no enterprise secret or real DingTalk service is used.
       DINGTALK_CLIENT_ID: 'playwright-ios-client',
       DINGTALK_CORP_ID: 'playwright-ios-corp',
+      DINGTALK_AUTO_LOGIN: 'true',
+      MOCK_LOGIN_ENABLED: 'false',
     },
   },
 })
