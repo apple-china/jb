@@ -5,8 +5,11 @@ on:
     branches: [main]
     paths-ignore:
       - AGENTS.md
-      - .github/workflows/deploy-dev.yml
-      - .github/workflows/deploy-production.yml
+      - README.md
+      - .github/workflows/**
+      - docs/**
+      - 项目部署流程/**
+      - scripts/tests/**
   workflow_dispatch:
 
 permissions:
