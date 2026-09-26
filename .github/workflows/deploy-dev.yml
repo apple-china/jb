@@ -1,11 +1,11 @@
-name: 自动部署 dev
+name: 部署开发环境
 
 on:
   push:
     branches: [main]
     paths-ignore:
       - AGENTS.md
-      - .github/workflows/deploy-main.yml
+      - .github/workflows/deploy-dev.yml
       - .github/workflows/deploy-production.yml
   workflow_dispatch:
 
@@ -59,7 +59,7 @@ jobs:
             --exclude '.env.production' --exclude '.env.dingtalk-test' --exclude '.env.*.bak' \
             --exclude '.deployment-backups/' --exclude '.tools/' --exclude '.runtime/' \
             --exclude 'artifacts/database-backups/' --exclude 'uploads/' --exclude 'downloads/' \
-            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-production/"
+            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-dev/"
       - name: 备份数据库并更新开发联调服务
         env:
           DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
@@ -68,7 +68,7 @@ jobs:
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
             set -eu
-            cd /opt/stacks/jiabei-production
+            cd /opt/stacks/jiabei-dev
             test -s .env.dev.defaults
             sh scripts/validate-env-secrets.sh .env.dev.secrets \
               DEV_DATABASE_PASSWORD SUPER_ADMIN_INITIAL_PASSWORD \

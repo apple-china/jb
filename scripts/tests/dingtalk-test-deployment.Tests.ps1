@@ -27,7 +27,7 @@ if (-not (Test-Path -LiteralPath $testComposePath)) {
 }
 
 $testCompose = Get-Content -LiteralPath $testComposePath -Raw
-$deployWorkflow = Get-Content -LiteralPath (Join-Path $root '.github\workflows\deploy-main.yml') -Raw
+$deployWorkflow = Get-Content -LiteralPath (Join-Path $root '.github\workflows\deploy-dev.yml') -Raw
 
 Assert-Contains $baseCompose 'SPRING_PROFILES_ACTIVE: local' 'Base Compose must keep the local profile.'
 if ($envExample -match '(?m)^DINGTALK_TEST_DATABASE_PASSWORD=[^\r\n]+$') { throw 'Example file must not contain a test database password.' }
