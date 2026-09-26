@@ -26,8 +26,8 @@ $viteConfig = Read-Required 'src\frontend\vite.config.ts'
 $dingtalkFrontend = Read-Required 'src\frontend\src\integrations\dingtalk.ts'
 $authFrontend = Read-Required 'src\frontend\src\auth.ts'
 $frontendEnvTypes = Read-Required 'src\frontend\src\env.d.ts'
-$devWorkflow = Read-Required '.github\workflows\deploy-main.yml'
-$prodWorkflow = Read-Required '.github\workflows\deploy-production.yml'
+$devWorkflow = Read-Required '.github\workflows\deploy-dev.yml'
+$prodWorkflow = Read-Required '.github\workflows\deploy-prod.yml'
 $secretValidator = Read-Required 'scripts\validate-env-secrets.sh'
 $proxyGate = Read-Required 'scripts\verify-proxy-route.sh'
 $versionWriter = Read-Required 'scripts\write-deployment-version.sh'
@@ -123,24 +123,55 @@ foreach ($obsolete in @('.env.dev.example', '.env.prod.example', '.env.productio
 }
 
 Assert-Contains $devWorkflow 'environment: dev' 'Main deployment must use the dev GitHub Environment.'
-Assert-Contains $devWorkflow '/opt/stacks/jiabei-production/' 'Dev deployment must preserve the current development path.'
+Assert-Contains $devWorkflow 'name: 部署开发环境' 'Dev workflow must use the canonical display name.'
+Assert-Contains $devWorkflow 'workflow_dispatch:' 'Dev deployment must preserve its existing manual trigger.'
+foreach ($ignoredPath in @('AGENTS.md', 'README.md', '.github/workflows/**', 'docs/**', '项目部署流程/**', 'scripts/tests/**')) {
+  Assert-Contains $devWorkflow "- $ignoredPath" "Dev workflow must ignore documentation-only path $ignoredPath."
+}
+foreach ($activePath in @('src/**', 'docker-compose*.yml', 'scripts/**', '.env.*')) {
+  if ($devWorkflow -match "(?m)^\s+- $([regex]::Escape($activePath))\s*$") {
+    throw "Dev workflow must not ignore active deployment path $activePath."
+  }
+}
+Assert-Contains $devWorkflow '/opt/stacks/jiabei-dev/' 'Dev deployment must use the canonical development path.'
 Assert-Contains $devWorkflow '--env-file .env.dev.defaults --env-file .env.dev.secrets' 'Dev deployment must load defaults before secrets.'
 Assert-Contains $devWorkflow "--exclude '.env.dev.secrets'" 'Dev rsync must preserve the server secrets file.'
 Assert-Contains $devWorkflow 'sh scripts/validate-env-secrets.sh .env.dev.secrets' 'Dev secrets must be validated before deployment.'
 Assert-Contains $devWorkflow 'docker network inspect jiabei-proxy' 'Dev deployment must fail before sync when the external proxy network is missing.'
 Assert-Contains $devWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx "$frontend_id" jiabei-dev-frontend 12 5' 'Dev deployment must use the shared bounded proxy gate.'
+$devBranchTriggers = [regex]::Matches($devWorkflow, '(?m)^\s+branches:\s*(.+)$')
+if ($devBranchTriggers.Count -ne 1 -or $devBranchTriggers[0].Groups[1].Value.Trim() -ne '[main]') {
+  throw 'Dev deployment must trigger pushes only from main.'
+}
+if (Test-Path -LiteralPath (Join-Path $root '.github\workflows\deploy-main.yml')) {
+  throw 'The legacy deploy-main workflow path must be removed.'
+}
+if ($devWorkflow.Contains('/opt/stacks/jiabei-production')) {
+  throw 'The active dev workflow must not reference the legacy deployment directory.'
+}
 Assert-Contains $prodWorkflow 'environment: prod' 'Production deployment must use the prod GitHub Environment.'
+Assert-Contains $prodWorkflow 'name: 部署生产环境' 'Production workflow must use the canonical display name.'
+Assert-Matches $prodWorkflow '(?ms)^on:\s*\r?\n  workflow_dispatch:\s*\r?\n    inputs:' 'Production workflow must remain manually dispatched.'
+if ($prodWorkflow -match '(?m)^  (push|pull_request|schedule|workflow_call):') {
+  throw 'Production deployment must expose only workflow_dispatch.'
+}
 Assert-Contains $prodWorkflow "if: github.ref == 'refs/heads/prod'" 'Production workflow must only run when dispatched from prod.'
 Assert-Contains $prodWorkflow 'version:' 'Production deployment must require a version input.'
 Assert-Contains $prodWorkflow 'refs/tags/${{ inputs.version }}' 'Production checkout must use the selected immutable tag.'
 Assert-Contains $prodWorkflow 'merge-base --is-ancestor "$release_sha" origin/prod' 'Production deployment must verify tag ancestry in prod.'
-Assert-Contains $prodWorkflow '/opt/stacks/jiabei/' 'Production deployment must preserve the current production path.'
+Assert-Contains $prodWorkflow '/opt/stacks/jiabei-prod/' 'Production deployment must use the canonical production path.'
 Assert-Contains $prodWorkflow '--env-file .env.prod.defaults --env-file .env.prod.secrets' 'Prod deployment must load defaults before secrets.'
 Assert-Contains $prodWorkflow "--exclude '.env.prod.secrets'" 'Prod rsync must preserve the server secrets file.'
 Assert-Contains $prodWorkflow 'sh scripts/validate-env-secrets.sh .env.prod.secrets' 'Prod secrets must be validated before deployment.'
 Assert-Contains $prodWorkflow 'docker network inspect jiabei-proxy' 'Production deployment must fail before backup or sync when the external proxy network is missing.'
 Assert-Contains $prodWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx \"\$frontend_id\" jiabei-prod-frontend 12 5' 'Production deployment must use the shared bounded proxy gate.'
 Assert-Contains $prodWorkflow 'sh scripts/write-deployment-version.sh .deployment-version ''$VERSION'' ''$RELEASE_SHA''' 'Production deployment must write its marker atomically.'
+if (Test-Path -LiteralPath (Join-Path $root '.github\workflows\deploy-production.yml')) {
+  throw 'The legacy deploy-production workflow path must be removed.'
+}
+if ($prodWorkflow.Contains('/opt/stacks/jiabei/')) {
+  throw 'The active production workflow must not reference the legacy deployment directory.'
+}
 Assert-Contains $proxyGate 'docker network inspect "$network_name"' 'The shared proxy gate must inspect the external network.'
 Assert-Contains $proxyGate 'getent hosts "$alias_name"' 'The shared proxy gate must resolve the environment-specific alias from Nginx.'
 Assert-Contains $proxyGate 'http://$alias_name:80/' 'The shared proxy gate must probe the environment-specific alias from Nginx.'

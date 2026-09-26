@@ -22,8 +22,8 @@ $proxyGateRelative = 'scripts\verify-proxy-route.sh'
 $versionWriterRelative = 'scripts\write-deployment-version.sh'
 $proxyGate = Read-Required $proxyGateRelative
 $versionWriter = Read-Required $versionWriterRelative
-$devWorkflow = Read-Required '.github\workflows\deploy-main.yml'
-$prodWorkflow = Read-Required '.github\workflows\deploy-production.yml'
+$devWorkflow = Read-Required '.github\workflows\deploy-dev.yml'
+$prodWorkflow = Read-Required '.github\workflows\deploy-prod.yml'
 
 Assert-Contains $devWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx "$frontend_id" jiabei-dev-frontend 12 5' 'Dev workflow must use the shared bounded proxy gate.'
 Assert-Contains $prodWorkflow 'sh scripts/verify-proxy-route.sh jiabei-proxy nginx \"\$frontend_id\" jiabei-prod-frontend 12 5' 'Prod workflow must use the shared bounded proxy gate.'

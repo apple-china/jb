@@ -13,7 +13,9 @@
 - `main` 对应开发联调环境，`prod` 对应生产环境；生产只部署属于 `prod` 历史的固定 `v*` 标签。
 - 未完成的功能不得合入 `main`；`prod` 仅通过 Pull Request 更新，禁止直接推送、强制推送和删除。
 - 开发使用 Spring/Vite `dev`、`.env.dev.defaults`、`.env.dev.secrets` 和 `docker-compose.dev.yml`。
+- 开发部署工作流为 `.github/workflows/deploy-dev.yml`，服务器目录为 `/opt/stacks/jiabei-dev`；Compose 项目名仍保持 `jiabei-production`。
 - 生产使用 Spring/Vite `prod`、`.env.prod.defaults`、`.env.prod.secrets` 和 `docker-compose.prod.yml`。
+- 生产部署工作流为 `.github/workflows/deploy-prod.yml`，服务器目录为 `/opt/stacks/jiabei-prod`；Compose 项目名仍保持 `jiabei`。
 - 第一次生产切换保留现有数据库、用户、Docker Volume、服务器路径和端口；物理重命名单独处理。
 
 ## 配置与秘密
