@@ -1,4 +1,4 @@
-name: 手动部署 prod 版本标签
+name: 部署生产环境
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
             set -eu
             docker network inspect jiabei-proxy >/dev/null
-            cd /opt/stacks/jiabei
+            cd /opt/stacks/jiabei-prod
             test -s .env.prod.defaults
             sh scripts/validate-env-secrets.sh .env.prod.secrets \
               PROD_DATABASE_PASSWORD SUPER_ADMIN_INITIAL_PASSWORD \
@@ -93,7 +93,7 @@ jobs:
             --exclude '.deployment-backups/' --exclude '.deployment-version' \
             --exclude '.tools/' --exclude '.runtime/' --exclude 'artifacts/database-backups/' \
             --exclude 'uploads/' --exclude 'downloads/' \
-            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei/"
+            -e "ssh -p $DEPLOY_PORT" ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/stacks/jiabei-prod/"
       - name: 备份数据库并更新生产服务
         env:
           DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
@@ -103,7 +103,7 @@ jobs:
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
             set -eu
-            cd /opt/stacks/jiabei
+            cd /opt/stacks/jiabei-prod
             test -s .env.prod.defaults
             sh scripts/validate-env-secrets.sh .env.prod.secrets \
               PROD_DATABASE_PASSWORD SUPER_ADMIN_INITIAL_PASSWORD \
