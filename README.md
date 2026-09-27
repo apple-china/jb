@@ -102,4 +102,4 @@ mvn '-Dtest=ComplexMockDataExternalIT,ExternalPostgreSqlIT,CardMockExternalIT,Pr
 - `prod` 不暴露本地 Mock 登录或调试接口；`MOCK_LOGIN_ENABLED` 在 dev/prod 均为 `false`。
 - 发布前必须验证目标环境的钉钉应用、群与卡片模板、魔点机构与设备、脱敏回调样本及 HTTPS 回调地址。
 
-实施状态见 [开发进度](docs/开发进度.md)，当前差异与外部阻塞见 [开发问题与假设](docs/开发问题与假设.md)，旧需求编号追溯见 [需求覆盖矩阵](docs/加贝云_需求覆盖矩阵_V1.0.md)。
+当前业务规则以 [V1.0 确认需求基线](docs/加贝云_V1.0_确认需求基线.md) 为准，架构与外部接口分别见[技术设计说明书](docs/加贝云_技术设计说明书_V1.0.md)和[第三方接口契约](docs/加贝云_第三方接口契约_V1.0.md)，旧需求编号追溯见[需求覆盖矩阵](docs/加贝云_需求覆盖矩阵_V1.0.md)。
