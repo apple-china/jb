@@ -32,6 +32,7 @@ $secretValidator = Read-Required 'scripts\validate-env-secrets.sh'
 $proxyGate = Read-Required 'scripts\verify-proxy-route.sh'
 $versionWriter = Read-Required 'scripts\write-deployment-version.sh'
 $gitignore = Read-Required '.gitignore'
+$deploymentDoc = Read-Required 'docs\deployment.md'
 
 Assert-Contains $devCompose 'SPRING_PROFILES_ACTIVE: dev' 'Dev Compose must activate the dev profile.'
 Assert-Contains $prodCompose 'SPRING_PROFILES_ACTIVE: prod' 'Prod Compose must activate the prod profile.'
@@ -121,6 +122,24 @@ Assert-Contains $gitignore '!.env.prod.defaults' 'Prod defaults must be explicit
 foreach ($obsolete in @('.env.dev.example', '.env.prod.example', '.env.production.example')) {
   if (Test-Path -LiteralPath (Join-Path $root $obsolete)) { throw "$obsolete must be removed." }
 }
+foreach ($obsolete in @(
+  '.env.example',
+  'docker-compose.dingtalk-test.yml',
+  'docker-compose.production.yml',
+  'src\backend\src\main\resources\application-dingtalk-test.yml',
+  'src\backend\src\main\resources\application-production.yml',
+  'scripts\tests\dingtalk-test-deployment.Tests.ps1',
+  'scripts\tests\production-deployment.Tests.ps1'
+)) {
+  if (Test-Path -LiteralPath (Join-Path $root $obsolete)) { throw "$obsolete legacy environment artifact must be removed." }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $root 'docker-compose.yml') -PathType Leaf)) {
+  throw 'The local-only base Compose file must remain available.'
+}
+Assert-Contains $deploymentDoc '/opt/stacks/jiabei-dev' 'Deployment documentation must use the canonical dev path.'
+Assert-Contains $deploymentDoc '/opt/stacks/jiabei-prod' 'Deployment documentation must use the canonical prod path.'
+Assert-Contains $deploymentDoc 'docker-compose.dev.yml' 'Deployment documentation must identify the active dev Compose file.'
+Assert-Contains $deploymentDoc 'docker-compose.prod.yml' 'Deployment documentation must identify the active prod Compose file.'
 
 Assert-Contains $devWorkflow 'environment: dev' 'Main deployment must use the dev GitHub Environment.'
 Assert-Contains $devWorkflow 'name: 部署开发环境' 'Dev workflow must use the canonical display name.'
