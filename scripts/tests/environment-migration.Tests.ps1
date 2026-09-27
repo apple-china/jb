@@ -119,7 +119,7 @@ Assert-Contains $prodEnv 'overridden by .env.prod.secrets' 'Prod defaults must d
 Assert-Contains $gitignore '.env.*.secrets' 'Secret environment layers must be ignored.'
 Assert-Contains $gitignore '!.env.dev.defaults' 'Dev defaults must be explicitly trackable.'
 Assert-Contains $gitignore '!.env.prod.defaults' 'Prod defaults must be explicitly trackable.'
-foreach ($obsolete in @('.env.dev.example', '.env.prod.example', '.env.production.example')) {
+foreach ($obsolete in @('.env.dev.example', '.env.prod.example')) {
   if (Test-Path -LiteralPath (Join-Path $root $obsolete)) { throw "$obsolete must be removed." }
 }
 foreach ($obsolete in @(

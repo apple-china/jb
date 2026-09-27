@@ -89,7 +89,7 @@ jobs:
           rsync -az --delete \
             --exclude '.git/' --exclude '.env' \
             --exclude '.env.dev.secrets' --exclude '.env.prod.secrets' \
-            --exclude '.env.production' --exclude '.env.dingtalk-test' --exclude '.env.*.bak' \
+            --exclude '.env.*.bak' \
             --exclude '.deployment-backups/' --exclude '.deployment-version' \
             --exclude '.tools/' --exclude '.runtime/' --exclude 'artifacts/database-backups/' \
             --exclude 'uploads/' --exclude 'downloads/' \
